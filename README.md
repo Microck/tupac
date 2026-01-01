@@ -53,15 +53,6 @@ organize your game dev discord with zero effort.
 
 ### how it works
 
-```mermaid
-flowchart TD
-    A[/newgame 'Steal a Brainrot'/] --> B(Generate Acronym: SaB)
-    B --> C[Create Category]
-    C --> D[Create Channels from Template]
-    C --> E[Create Roles: SaB-Coder, SaB-Artist...]
-    E --> F[Auto-assign to members with @Coder, @Artist...]
-```
-
 1. **create:** run `/newgame "Your Game Name"` - acronym auto-generated.
 2. **channels:** 25 channels created from template with emoji prefixes.
 3. **roles:** game-specific roles created and auto-assigned to team members.
