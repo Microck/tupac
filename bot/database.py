@@ -29,6 +29,7 @@ async def init_db():
                 name TEXT NOT NULL,
                 group_name TEXT NOT NULL,
                 is_voice BOOLEAN DEFAULT 0,
+                description TEXT,
                 UNIQUE(name)
             );
 
@@ -66,10 +67,10 @@ async def init_db():
         cursor = await db.execute("SELECT COUNT(*) FROM template_channels")
         count = (await cursor.fetchone())[0]
         if count == 0:
-            for name, group_name, is_voice in DEFAULT_TEMPLATE:
+            for name, group_name, is_voice, description in DEFAULT_TEMPLATE:
                 await db.execute(
-                    "INSERT INTO template_channels (name, group_name, is_voice) VALUES (?, ?, ?)",
-                    (name, group_name, is_voice)
+                    "INSERT INTO template_channels (name, group_name, is_voice, description) VALUES (?, ?, ?, ?)",
+                    (name, group_name, is_voice, description)
                 )
         
         await db.commit()
@@ -123,18 +124,19 @@ async def get_all_template_channels() -> List[TemplateChannel]:
                 id=r["id"],
                 name=r["name"],
                 group_name=r["group_name"],
-                is_voice=bool(r["is_voice"])
+                is_voice=bool(r["is_voice"]),
+                description=r["description"]
             )
             for r in rows
         ]
 
 
-async def add_template_channel(name: str, group_name: str, is_voice: bool = False) -> bool:
+async def add_template_channel(name: str, group_name: str, is_voice: bool = False, description: str = None) -> bool:
     try:
         async with aiosqlite.connect(DATABASE_PATH) as db:
             await db.execute(
-                "INSERT INTO template_channels (name, group_name, is_voice) VALUES (?, ?, ?)",
-                (name, group_name, is_voice)
+                "INSERT INTO template_channels (name, group_name, is_voice, description) VALUES (?, ?, ?, ?)",
+                (name, group_name, is_voice, description)
             )
             await db.commit()
             return True
@@ -165,7 +167,8 @@ async def get_template_channel(name: str) -> Optional[TemplateChannel]:
                 id=row["id"],
                 name=row["name"],
                 group_name=row["group_name"],
-                is_voice=bool(row["is_voice"])
+                is_voice=bool(row["is_voice"]),
+                description=row["description"]
             )
         return None
 

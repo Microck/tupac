@@ -2,7 +2,7 @@
   <img src="https://img.icons8.com/fluency/96/controller.png" alt="logo" width="96"/>
 </p>
 
-<h1 align="center">gamedev-bot</h1>
+<h1 align="center">tupac</h1>
 
 <p align="center">
   discord bot for organizing game dev projects with auto-generated channels, roles, and acronyms.
@@ -18,11 +18,19 @@
 
 ### quickstart
 
-**docker (recommended)**
+**1. create discord bot**
+
+1. go to [discord developer portal](https://discord.com/developers/applications)
+2. create new application → bot tab → create bot → copy token
+3. enable **Server Members Intent** under Privileged Gateway Intents
+4. oauth2 → url generator → scopes: `bot`, `applications.commands` → permissions: `Administrator`
+5. use generated url to invite bot
+
+**2. run with docker (recommended)**
 
 ```bash
-git clone https://github.com/microck/gamedev-discord-bot.git
-cd gamedev-discord-bot
+git clone https://github.com/microck/tupac.git
+cd tupac
 cp .env.example .env
 
 # edit .env with your DISCORD_TOKEN and GUILD_ID
@@ -30,7 +38,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-**manual**
+**3. run manually**
 
 ```bash
 pip install -r requirements.txt
@@ -47,6 +55,8 @@ organize your game dev discord with zero effort.
 - **smart acronyms:** "Steal a Brainrot" → SaB, "The Great Escape" → TGE.
 - **role sync:** members with @Coder auto-get @SaB-Coder for every game.
 - **emoji groups:** channels prefixed by category (💻-sab-code-frontend).
+- **channel descriptions:** each channel has a topic explaining its purpose.
+- **colored roles:** each game gets a unique color for its roles.
 - **live templates:** modify template, sync to all existing games instantly.
 
 ---
@@ -54,20 +64,24 @@ organize your game dev discord with zero effort.
 ### how it works
 
 1. **create:** run `/newgame "Your Game Name"` - acronym auto-generated.
-2. **channels:** 25 channels created from template with emoji prefixes.
-3. **roles:** game-specific roles created and auto-assigned to team members.
+2. **channels:** 25 channels created from template with emoji prefixes and descriptions.
+3. **roles:** game-specific roles created with random color and auto-assigned to team members.
 4. **customize:** add/remove channels per-game or modify the global template.
 
 ---
 
 ### usage
 
-#### 1. setup
+#### 1. assign member roles
 
-create these member roles in your server (manually):
-- `Coder`, `Artist`, `Audio`, `Writer`, `QA`
+```
+/assign add @user Coder     → assign Coder role (creates if missing)
+/assign add @user Artist    → assign Artist role
+/assign remove @user Coder  → remove Coder role
+/assign list                → list all members with roles
+```
 
-assign them to your team. the bot handles the rest.
+available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
 
 #### 2. create a game
 
@@ -79,50 +93,50 @@ creates:
 
 ```
 📁 Steal a Brainrot
-├── 💬-sab-announcements
-├── 💬-sab-general
-├── 💬-sab-brainstorming
-├── 💬-sab-tasks
-├── 💻-sab-code-frontend
-├── 💻-sab-code-backend
-├── 💻-sab-code-gamelogic
-├── 💻-sab-code-networking
-├── 💻-sab-code-bugs
-├── 🎨-sab-design-gui
-├── 🎨-sab-design-3d
-├── 🎨-sab-design-2d
-├── 🎨-sab-design-animation
-├── 🎨-sab-design-vfx
-├── 🎨-sab-design-concept
-├── 🔊-sab-audio-music
-├── 🔊-sab-audio-sfx
-├── ✍️-sab-writing-story
-├── ✍️-sab-writing-dialogue
-├── ✍️-sab-writing-copy
-├── 🧪-sab-qa-playtesting
-├── 🧪-sab-qa-feedback
-├── 📚-sab-resources-refs
-├── 📚-sab-resources-tools
-└── 🎙️-sab-voice
+├── 💬-sab-announcements    (Project updates, milestones, and important news)
+├── 💬-sab-general          (Casual chat and general discussion)
+├── 💬-sab-brainstorming    (Ideas, concepts, and feature proposals)
+├── 💬-sab-tasks            (Task assignments, todos, and progress tracking)
+├── 💻-sab-code-frontend    (UI, menus, HUD, and client-side code)
+├── 💻-sab-code-backend     (Server, database, and backend systems)
+├── 💻-sab-code-gamelogic   (Game mechanics, physics, and core systems)
+├── 💻-sab-code-networking  (Multiplayer, netcode, and online features)
+├── 💻-sab-code-bugs        (Bug reports, debugging, and issue tracking)
+├── 🎨-sab-design-gui       (UI/UX design, menus, and interface mockups)
+├── 🎨-sab-design-3d        (3D models, textures, and environments)
+├── 🎨-sab-design-2d        (Sprites, textures, icons, and 2D artwork)
+├── 🎨-sab-design-animation (Character animations, rigging, and motion)
+├── 🎨-sab-design-vfx       (Particles, shaders, and visual effects)
+├── 🎨-sab-design-concept   (Concept art, sketches, and visual ideas)
+├── 🔊-sab-audio-music      (Soundtrack, themes, and background music)
+├── 🔊-sab-audio-sfx        (Sound effects, foley, and audio design)
+├── ✍️-sab-writing-story    (Narrative, lore, worldbuilding, and plot)
+├── ✍️-sab-writing-dialogue (Character dialogue and voice lines)
+├── ✍️-sab-writing-copy     (Marketing copy, descriptions, and text)
+├── 🧪-sab-qa-playtesting   (Playtest sessions, builds, and test plans)
+├── 🧪-sab-qa-feedback      (Tester feedback, reviews, and suggestions)
+├── 📚-sab-resources-refs   (Reference images, inspiration, and research)
+├── 📚-sab-resources-tools  (Tools, tutorials, and helpful resources)
+└── 🎙️-sab-voice            (Voice chat for team calls)
 ```
 
-roles created: `@SaB-Coder`, `@SaB-Artist`, `@SaB-Audio`, `@SaB-Writer`, `@SaB-QA`
+roles created: `@SaB-Coder`, `@SaB-Artist`, `@SaB-Audio`, `@SaB-Writer`, `@SaB-QA` (all same color)
 
 #### 3. manage template
 
 ```
-/template list              → view current template
-/template add <name> <group> → add channel to template
-/template remove <name>     → remove from template
-/template sync              → sync changes to all games
+/template list                          → view current template
+/template add <name> <group> [desc]     → add channel to template
+/template remove <name>                 → remove from template
+/template sync                          → sync changes to all games
 ```
 
 #### 4. per-game customization
 
 ```
-/game addchannel SaB marketing general    → add custom channel
-/game removechannel SaB code-networking   → remove channel
-/game list                                → list all games
+/game addchannel SaB marketing general  → add custom channel
+/game removechannel SaB code-networking → remove channel
+/game list                              → list all games
 ```
 
 ---
@@ -136,6 +150,9 @@ roles created: `@SaB-Coder`, `@SaB-Artist`, `@SaB-Audio`, `@SaB-Writer`, `@SaB-Q
 | `/game list` | list all games |
 | `/game addchannel` | add custom channel to a game |
 | `/game removechannel` | remove channel from a game |
+| `/assign add` | assign member role to user |
+| `/assign remove` | remove member role from user |
+| `/assign list` | list all users with member roles |
 | `/template list` | show channel template |
 | `/template add` | add channel to template |
 | `/template remove` | remove from template |
@@ -171,7 +188,7 @@ gamedev-discord-bot/
 │   ├── models.py        # dataclasses
 │   ├── utils.py         # acronym generation
 │   └── cogs/
-│       ├── games.py     # /newgame, /deletegame, /game
+│       ├── games.py     # /newgame, /deletegame, /game, /assign
 │       └── templates.py # /template, /group
 ├── data/                # sqlite database
 └── dist/                # (if compiled)
@@ -185,7 +202,7 @@ gamedev-discord-bot/
 wait a few minutes for discord to sync, or set `GUILD_ID` in .env for instant sync.
 
 **role sync not working**
-enable Server Members Intent in discord developer portal. bot role must be above game roles.
+enable **Server Members Intent** in discord developer portal. bot role must be above game roles in hierarchy.
 
 **permission errors**
 move bot role higher in server role list. administrator permission recommended.

@@ -36,7 +36,7 @@ class TemplatesCog(commands.Cog):
         groups = await get_groups_dict()
         
         if not channels:
-            await interaction.response.send_message("No template channels configured.", ephemeral=True)
+            await interaction.response.send_message("No template channels configured.")
             return
         
         # Group channels by group_name
@@ -60,12 +60,13 @@ class TemplatesCog(commands.Cog):
                 inline=False
             )
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
     
     @template_group.command(name="add", description="Add a channel to the template")
     @app_commands.describe(
         name="Channel name (e.g., code-debugging)",
         group="Group name (e.g., code, design, audio)",
+        description="Channel description/topic",
         is_voice="Is this a voice channel?"
     )
     @app_commands.checks.has_permissions(administrator=True)
@@ -74,6 +75,7 @@ class TemplatesCog(commands.Cog):
         interaction: discord.Interaction,
         name: str,
         group: str,
+        description: str = None,
         is_voice: bool = False
     ):
         # Validate group exists
@@ -82,24 +84,21 @@ class TemplatesCog(commands.Cog):
             groups = await get_all_groups()
             group_names = ", ".join(g.name for g in groups)
             await interaction.response.send_message(
-                f"Group `{group}` not found. Available groups: {group_names}",
-                ephemeral=True
+                f"Group `{group}` not found. Available groups: {group_names}"
             )
             return
         
         # Normalize name
         name = name.lower().replace(" ", "-")
         
-        success = await add_template_channel(name, group, is_voice)
+        success = await add_template_channel(name, group, is_voice, description)
         if success:
             await interaction.response.send_message(
-                f"Added `{name}` to template in group `{group}`.",
-                ephemeral=True
+                f"Added `{name}` to template in group `{group}`."
             )
         else:
             await interaction.response.send_message(
-                f"Channel `{name}` already exists in template.",
-                ephemeral=True
+                f"Channel `{name}` already exists in template."
             )
     
     @template_group.command(name="remove", description="Remove a channel from the template")
@@ -111,23 +110,21 @@ class TemplatesCog(commands.Cog):
         success = await remove_template_channel(name)
         if success:
             await interaction.response.send_message(
-                f"Removed `{name}` from template.",
-                ephemeral=True
+                f"Removed `{name}` from template."
             )
         else:
             await interaction.response.send_message(
-                f"Channel `{name}` not found in template.",
-                ephemeral=True
+                f"Channel `{name}` not found in template."
             )
     
     @template_group.command(name="sync", description="Sync template to all existing games")
     @app_commands.checks.has_permissions(administrator=True)
     async def template_sync(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         
         games = await get_all_games()
         if not games:
-            await interaction.followup.send("No games to sync.", ephemeral=True)
+            await interaction.followup.send("No games to sync.")
             return
         
         template_channels = await get_all_template_channels()
@@ -158,7 +155,10 @@ class TemplatesCog(commands.Cog):
                         if template_ch.is_voice:
                             new_channel = await category.create_voice_channel(name=channel_name)
                         else:
-                            new_channel = await category.create_text_channel(name=channel_name)
+                            new_channel = await category.create_text_channel(
+                                name=channel_name,
+                                topic=template_ch.description
+                            )
                         
                         await add_game_channel(
                             game_id=game.id,
@@ -191,7 +191,7 @@ class TemplatesCog(commands.Cog):
             if len(errors) > 10:
                 result += f"\n... and {len(errors) - 10} more errors"
         
-        await interaction.followup.send(result, ephemeral=True)
+        await interaction.followup.send(result)
     
     # ============== GROUP COMMANDS ==============
     
@@ -201,7 +201,7 @@ class TemplatesCog(commands.Cog):
         groups = await get_all_groups()
         
         if not groups:
-            await interaction.response.send_message("No groups configured.", ephemeral=True)
+            await interaction.response.send_message("No groups configured.")
             return
         
         embed = discord.Embed(title="Channel Groups", color=discord.Color.green())
@@ -213,7 +213,7 @@ class TemplatesCog(commands.Cog):
                 inline=True
             )
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
     
     @group_cmd.command(name="emoji", description="Change a group's emoji")
     @app_commands.describe(
@@ -227,8 +227,7 @@ class TemplatesCog(commands.Cog):
             groups = await get_all_groups()
             group_names = ", ".join(g.name for g in groups)
             await interaction.response.send_message(
-                f"Group `{group}` not found. Available groups: {group_names}",
-                ephemeral=True
+                f"Group `{group}` not found. Available groups: {group_names}"
             )
             return
         
@@ -237,8 +236,7 @@ class TemplatesCog(commands.Cog):
         
         await interaction.response.send_message(
             f"Updated `{group}` emoji: {old_emoji} -> {emoji}\n"
-            f"Use `/template sync` to update existing channels.",
-            ephemeral=True
+            f"Use `/template sync` to update existing channels."
         )
     
     # ============== AUTOCOMPLETE ==============

@@ -25,6 +25,7 @@ class TemplateChannel:
     name: str
     group_name: str
     is_voice: bool = False
+    description: Optional[str] = None
 
 
 @dataclass

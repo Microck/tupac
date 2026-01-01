@@ -1,8 +1,25 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import random
 
 from ..config import MEMBER_ROLES
+
+# Predefined colors for game roles (vibrant, distinguishable)
+ROLE_COLORS = [
+    0xe74c3c,  # red
+    0xe67e22,  # orange
+    0xf1c40f,  # yellow
+    0x2ecc71,  # green
+    0x1abc9c,  # teal
+    0x3498db,  # blue
+    0x9b59b6,  # purple
+    0xe91e63,  # pink
+    0x00bcd4,  # cyan
+    0x8bc34a,  # lime
+    0xff5722,  # deep orange
+    0x673ab7,  # deep purple
+]
 from ..database import (
     get_all_games,
     get_game_by_acronym,
@@ -33,6 +50,116 @@ class GamesCog(commands.Cog):
         self.bot = bot
     
     game_group = app_commands.Group(name="game", description="Manage games")
+    assign_group = app_commands.Group(name="assign", description="Assign member roles")
+    
+    # ============== ASSIGN COMMANDS ==============
+    
+    @assign_group.command(name="add", description="Assign a member role to a user")
+    @app_commands.describe(
+        user="User to assign the role to",
+        role="Member role to assign"
+    )
+    @app_commands.choices(role=[
+        app_commands.Choice(name="Coder", value="Coder"),
+        app_commands.Choice(name="Artist", value="Artist"),
+        app_commands.Choice(name="Audio", value="Audio"),
+        app_commands.Choice(name="Writer", value="Writer"),
+        app_commands.Choice(name="QA", value="QA"),
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def assign_add(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        role: str
+    ):
+        guild = interaction.guild
+        
+        # Find or create the member role
+        discord_role = discord.utils.get(guild.roles, name=role)
+        if not discord_role:
+            # Create the role if it doesn't exist
+            discord_role = await guild.create_role(
+                name=role,
+                reason=f"Member role created by /assign"
+            )
+        
+        if discord_role in user.roles:
+            await interaction.response.send_message(
+                f"{user.mention} already has the {role} role."
+            )
+            return
+        
+        try:
+            await user.add_roles(discord_role, reason=f"Assigned by {interaction.user}")
+            await interaction.response.send_message(
+                f"Assigned **{role}** to {user.mention}. Game roles will sync automatically."
+            )
+            # Sync game roles for this user
+            await self.bot.sync_member_game_roles(user)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "Missing permissions to assign roles."
+            )
+    
+    @assign_group.command(name="remove", description="Remove a member role from a user")
+    @app_commands.describe(
+        user="User to remove the role from",
+        role="Member role to remove"
+    )
+    @app_commands.choices(role=[
+        app_commands.Choice(name="Coder", value="Coder"),
+        app_commands.Choice(name="Artist", value="Artist"),
+        app_commands.Choice(name="Audio", value="Audio"),
+        app_commands.Choice(name="Writer", value="Writer"),
+        app_commands.Choice(name="QA", value="QA"),
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def assign_remove(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        role: str
+    ):
+        guild = interaction.guild
+        discord_role = discord.utils.get(guild.roles, name=role)
+        
+        if not discord_role or discord_role not in user.roles:
+            await interaction.response.send_message(
+                f"{user.mention} doesn't have the {role} role."
+            )
+            return
+        
+        try:
+            await user.remove_roles(discord_role, reason=f"Removed by {interaction.user}")
+            await interaction.response.send_message(
+                f"Removed **{role}** from {user.mention}. Game roles will sync automatically."
+            )
+            # Sync game roles for this user
+            await self.bot.sync_member_game_roles(user)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "Missing permissions to remove roles."
+            )
+    
+    @assign_group.command(name="list", description="List all users with member roles")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def assign_list(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        
+        embed = discord.Embed(title="Member Roles", color=discord.Color.blue())
+        
+        for role_name in MEMBER_ROLES:
+            role = discord.utils.get(guild.roles, name=role_name)
+            if role:
+                members = [m.mention for m in role.members if not m.bot]
+                value = ", ".join(members) if members else "No members"
+            else:
+                value = "Role not created"
+            
+            embed.add_field(name=role_name, value=value, inline=False)
+        
+        await interaction.response.send_message(embed=embed)
     
     # ============== NEWGAME ==============
     
@@ -48,7 +175,7 @@ class GamesCog(commands.Cog):
         name: str,
         acronym: str = None
     ):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         
         guild = interaction.guild
         
@@ -60,8 +187,7 @@ class GamesCog(commands.Cog):
             if acronym.lower() in {a.lower() for a in existing_acronyms}:
                 acronym = resolve_acronym_conflict(acronym, existing_acronyms)
                 await interaction.followup.send(
-                    f"Acronym already exists, using `{acronym}` instead.",
-                    ephemeral=True
+                    f"Acronym already exists, using `{acronym}` instead."
                 )
         else:
             # Auto-generate
@@ -79,11 +205,18 @@ class GamesCog(commands.Cog):
             # Save game to DB
             game = await create_game(name, acronym, category.id)
             
-            # Create roles
+            # Pick a random color for this game's roles
+            role_color = discord.Color(random.choice(ROLE_COLORS))
+            
+            # Create roles with the same color
             created_roles = []
             for role_name in MEMBER_ROLES:
                 game_role_name = format_role_name(acronym, role_name)
-                role = await guild.create_role(name=game_role_name, reason=f"Game: {name}")
+                role = await guild.create_role(
+                    name=game_role_name,
+                    color=role_color,
+                    reason=f"Game: {name}"
+                )
                 await add_game_role(game.id, role.id, role_name)
                 created_roles.append(role)
             
@@ -95,7 +228,10 @@ class GamesCog(commands.Cog):
                 if template_ch.is_voice:
                     channel = await category.create_voice_channel(name=channel_name)
                 else:
-                    channel = await category.create_text_channel(name=channel_name)
+                    channel = await category.create_text_channel(
+                        name=channel_name,
+                        topic=template_ch.description
+                    )
                 
                 await add_game_channel(
                     game_id=game.id,
@@ -113,7 +249,7 @@ class GamesCog(commands.Cog):
             embed = discord.Embed(
                 title=f"Created: {name}",
                 description=f"Acronym: `{acronym}`",
-                color=discord.Color.green()
+                color=role_color
             )
             embed.add_field(
                 name="Category",
@@ -131,10 +267,10 @@ class GamesCog(commands.Cog):
                 inline=False
             )
             
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed)
             
         except discord.HTTPException as e:
-            await interaction.followup.send(f"Error creating game: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error creating game: {e}")
     
     # ============== DELETEGAME ==============
     
@@ -142,11 +278,11 @@ class GamesCog(commands.Cog):
     @app_commands.describe(acronym="Game acronym to delete")
     @app_commands.checks.has_permissions(administrator=True)
     async def deletegame(self, interaction: discord.Interaction, acronym: str):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         
         game = await get_game_by_acronym(acronym)
         if not game:
-            await interaction.followup.send(f"Game `{acronym}` not found.", ephemeral=True)
+            await interaction.followup.send(f"Game `{acronym}` not found.")
             return
         
         guild = interaction.guild
@@ -187,7 +323,7 @@ class GamesCog(commands.Cog):
         if errors:
             result += f"\n\nErrors:\n" + "\n".join(errors)
         
-        await interaction.followup.send(result, ephemeral=True)
+        await interaction.followup.send(result)
     
     # ============== GAME LIST ==============
     
@@ -197,7 +333,7 @@ class GamesCog(commands.Cog):
         games = await get_all_games()
         
         if not games:
-            await interaction.response.send_message("No games created yet.", ephemeral=True)
+            await interaction.response.send_message("No games created yet.")
             return
         
         embed = discord.Embed(title="Games", color=discord.Color.blue())
@@ -212,7 +348,7 @@ class GamesCog(commands.Cog):
                 inline=False
             )
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
     
     # ============== GAME ADDCHANNEL ==============
     
@@ -234,7 +370,7 @@ class GamesCog(commands.Cog):
     ):
         game = await get_game_by_acronym(acronym)
         if not game:
-            await interaction.followup.send(f"Game `{acronym}` not found.", ephemeral=True)
+            await interaction.response.send_message(f"Game `{acronym}` not found.")
             return
         
         # Validate group
@@ -243,8 +379,7 @@ class GamesCog(commands.Cog):
             groups = await get_all_groups()
             group_names = ", ".join(g.name for g in groups)
             await interaction.response.send_message(
-                f"Group `{group}` not found. Available: {group_names}",
-                ephemeral=True
+                f"Group `{group}` not found. Available: {group_names}"
             )
             return
         
@@ -255,12 +390,11 @@ class GamesCog(commands.Cog):
         existing = await get_game_channel_by_name(game.id, name)
         if existing:
             await interaction.response.send_message(
-                f"Channel `{name}` already exists in this game.",
-                ephemeral=True
+                f"Channel `{name}` already exists in this game."
             )
             return
         
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         
         groups = await get_groups_dict()
         emoji = groups.get(group, "")
@@ -268,7 +402,7 @@ class GamesCog(commands.Cog):
         
         category = interaction.guild.get_channel(game.category_id)
         if not category:
-            await interaction.followup.send("Game category not found.", ephemeral=True)
+            await interaction.followup.send("Game category not found.")
             return
         
         try:
@@ -287,11 +421,10 @@ class GamesCog(commands.Cog):
             )
             
             await interaction.followup.send(
-                f"Created custom channel: {channel.mention}",
-                ephemeral=True
+                f"Created custom channel: {channel.mention}"
             )
         except discord.HTTPException as e:
-            await interaction.followup.send(f"Error: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error: {e}")
     
     # ============== GAME REMOVECHANNEL ==============
     
@@ -309,7 +442,7 @@ class GamesCog(commands.Cog):
     ):
         game = await get_game_by_acronym(acronym)
         if not game:
-            await interaction.response.send_message(f"Game `{acronym}` not found.", ephemeral=True)
+            await interaction.response.send_message(f"Game `{acronym}` not found.")
             return
         
         name = name.lower().replace(" ", "-")
@@ -317,8 +450,7 @@ class GamesCog(commands.Cog):
         channel_id = await db_remove_game_channel(game.id, name)
         if not channel_id:
             await interaction.response.send_message(
-                f"Channel `{name}` not found in this game.",
-                ephemeral=True
+                f"Channel `{name}` not found in this game."
             )
             return
         
@@ -328,18 +460,15 @@ class GamesCog(commands.Cog):
             try:
                 await channel.delete(reason=f"Removed from game: {game.name}")
                 await interaction.response.send_message(
-                    f"Removed channel `{name}` from {game.name}.",
-                    ephemeral=True
+                    f"Removed channel `{name}` from {game.name}."
                 )
             except discord.HTTPException as e:
                 await interaction.response.send_message(
-                    f"Removed from DB but failed to delete channel: {e}",
-                    ephemeral=True
+                    f"Removed from DB but failed to delete channel: {e}"
                 )
         else:
             await interaction.response.send_message(
-                f"Removed `{name}` from DB (channel already deleted).",
-                ephemeral=True
+                f"Removed `{name}` from DB (channel already deleted)."
             )
     
     # ============== AUTOCOMPLETE ==============
