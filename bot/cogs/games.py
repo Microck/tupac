@@ -522,6 +522,12 @@ class GamesCog(commands.Cog):
             for ch in channels
             if current.lower() in ch.name.lower()
         ][:25]
+    
+    # ============== FUN COMMANDS ==============
+    
+    @app_commands.command(name="thuglife", description="Thug life")
+    async def thuglife(self, interaction: discord.Interaction):
+        await interaction.response.send_message("https://tenor.com/view/thug-life-gif-25350966")
 
 
 async def setup(bot: commands.Bot):
