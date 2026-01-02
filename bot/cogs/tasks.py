@@ -63,6 +63,40 @@ PRIORITY_EMOJI = {
     'Low': '\U0001f7e2',       # green circle
 }
 
+# Role-based task styling
+ROLE_TASK_STYLE = {
+    'coder': {
+        'emoji': '\U0001f4bb',  # laptop
+        'color': discord.Color.blue(),
+        'label': 'Code Task'
+    },
+    'artist': {
+        'emoji': '\U0001f3a8',  # palette
+        'color': discord.Color.purple(),
+        'label': 'Art Task'
+    },
+    'audio': {
+        'emoji': '\U0001f3b5',  # music note
+        'color': discord.Color.gold(),
+        'label': 'Audio Task'
+    },
+    'writer': {
+        'emoji': '\u270d\ufe0f',  # writing hand
+        'color': discord.Color.teal(),
+        'label': 'Writing Task'
+    },
+    'qa': {
+        'emoji': '\U0001f9ea',  # test tube
+        'color': discord.Color.red(),
+        'label': 'QA Task'
+    },
+    'default': {
+        'emoji': '\U0001f4cb',  # clipboard
+        'color': discord.Color.greyple(),
+        'label': 'Task'
+    }
+}
+
 
 class ReassignModal(discord.ui.Modal, title='Reassign Task'):
     user_id_input = discord.ui.TextInput(
@@ -633,9 +667,16 @@ class TasksCog(commands.Cog):
         description="Task description",
         target_channel="Channel where the thread will be created",
         assignee="User to assign the task to",
+        priority="Task priority",
         deadline="Deadline (YYYY-MM-DD)",
         game="Game acronym (auto-detected from channel if not provided)"
     )
+    @app_commands.choices(priority=[
+        app_commands.Choice(name="Critical", value="Critical"),
+        app_commands.Choice(name="High", value="High"),
+        app_commands.Choice(name="Medium", value="Medium"),
+        app_commands.Choice(name="Low", value="Low"),
+    ])
     @app_commands.checks.has_permissions(administrator=True)
     async def task_create(
         self,
@@ -644,6 +685,7 @@ class TasksCog(commands.Cog):
         description: str,
         target_channel: discord.TextChannel,
         assignee: discord.Member,
+        priority: str = None,
         deadline: str = None,
         game: str = None
     ):
@@ -675,7 +717,8 @@ class TasksCog(commands.Cog):
             description=description,
             assignee_id=assignee.id,
             target_channel_id=target_channel.id,
-            deadline=deadline
+            deadline=deadline,
+            priority=priority
         )
 
         # Get game name for embed
@@ -719,73 +762,37 @@ class TasksCog(commands.Cog):
             f"Deadline: {deadline or 'None'}"
         )
 
+    def _get_role_style(self, member: discord.Member = None) -> dict:
+        """Get task styling based on member's roles."""
+        if not member:
+            return ROLE_TASK_STYLE['default']
+        
+        role_names = [r.name.lower() for r in member.roles]
+        
+        for role_key in ['coder', 'artist', 'audio', 'writer', 'qa']:
+            if role_key in role_names:
+                return ROLE_TASK_STYLE[role_key]
+        
+        return ROLE_TASK_STYLE['default']
+
     def create_control_embed(self, task: Task, assignee: discord.Member = None) -> discord.Embed:
+        """Create the detailed control panel embed shown inside the thread."""
         status = task.status or 'todo'
-        embed = discord.Embed(
-            title=task.title,
-            description=task.description or "No description",
-            color=STATUS_COLORS.get(status, discord.Color.greyple())
-        )
+        role_style = self._get_role_style(assignee)
         
-        if assignee:
-            embed.add_field(name="Assignee", value=assignee.mention, inline=True)
+        # Use status color if not todo, otherwise use role color
+        if status == 'todo':
+            color = role_style['color']
         else:
-            embed.add_field(name="Assignee", value=f"<@{task.assignee_id}>", inline=True)
-        
-        embed.add_field(name="Status", value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", inline=True)
-        
-        if task.deadline:
-            embed.add_field(name="Deadline", value=str(task.deadline)[:10], inline=True)
-        
-        if task.eta:
-            embed.add_field(name="ETA", value=task.eta, inline=True)
-        
-        if task.priority:
-            embed.add_field(name="Priority", value=task.priority, inline=True)
-
-        return embed
-
-    async def update_control_panel(self, interaction: discord.Interaction, task: Task):
-        """Update the control panel embed in the thread."""
-        if not task.control_message_id or not task.thread_id:
-            return
-
-        try:
-            thread = interaction.guild.get_channel(task.thread_id)
-            if thread:
-                msg = await thread.fetch_message(task.control_message_id)
-                embed = self.create_control_embed(task)
-                view = TaskView(task.id, self) if task.status not in ('done', 'cancelled') else None
-                await msg.edit(embed=embed, view=view)
-        except discord.NotFound:
-            pass
-        except discord.HTTPException:
-            pass
-
-    def create_header_embed(self, task: Task, assignee: discord.Member = None, game_name: str = None) -> discord.Embed:
-        """Create the detailed header embed shown in the channel (before thread)."""
-        status = task.status or 'todo'
-        
-        # Build description with task details
-        desc_parts = []
-        if task.description:
-            # Truncate long descriptions
-            desc_text = task.description[:200] + "..." if len(task.description) > 200 else task.description
-            desc_parts.append(desc_text)
+            color = STATUS_COLORS.get(status, discord.Color.greyple())
         
         embed = discord.Embed(
-            title=f"{STATUS_EMOJI.get(status, '\U0001f4cb')} {task.title}",
-            description="\n".join(desc_parts) if desc_parts else None,
-            color=STATUS_COLORS.get(status, discord.Color.greyple())
+            title=f"{role_style['emoji']} {task.title}",
+            description=task.description or "No description provided.",
+            color=color
         )
         
-        # Assignee
-        if assignee:
-            embed.add_field(name="Assignee", value=assignee.mention, inline=True)
-        else:
-            embed.add_field(name="Assignee", value=f"<@{task.assignee_id}>", inline=True)
-        
-        # Status
+        # Status (prominent)
         embed.add_field(
             name="Status", 
             value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", 
@@ -799,31 +806,78 @@ class TasksCog(commands.Cog):
         
         # Deadline
         if task.deadline:
-            deadline_str = str(task.deadline)[:10]
-            embed.add_field(name="Deadline", value=f"\U0001f4c5 {deadline_str}", inline=True)
+            embed.add_field(name="Deadline", value=f"\U0001f4c5 {str(task.deadline)[:10]}", inline=True)
         
-        # ETA
+        # ETA (assignee sets this)
         if task.eta:
-            embed.add_field(name="ETA", value=f"\u23f0 {task.eta}", inline=True)
+            embed.add_field(name="Your ETA", value=f"\u23f0 {task.eta}", inline=True)
         
-        # Game
-        if game_name:
-            embed.add_field(name="Project", value=f"\U0001f3ae {game_name}", inline=True)
-        elif task.game_acronym:
-            embed.add_field(name="Project", value=f"\U0001f3ae {task.game_acronym}", inline=True)
+        # Footer
+        embed.set_footer(text=f"Task #{task.id} | Use buttons below to update")
+
+        return embed
+
+    async def update_control_panel(self, interaction: discord.Interaction, task: Task):
+        """Update the control panel embed in the thread."""
+        if not task.control_message_id or not task.thread_id:
+            return
+
+        try:
+            thread = interaction.guild.get_channel(task.thread_id)
+            if thread:
+                msg = await thread.fetch_message(task.control_message_id)
+                # Try to get assignee for role styling
+                assignee = interaction.guild.get_member(task.assignee_id)
+                embed = self.create_control_embed(task, assignee)
+                view = TaskView(task.id, self) if task.status not in ('done', 'cancelled') else None
+                await msg.edit(embed=embed, view=view)
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            pass
+
+    def create_header_embed(self, task: Task, assignee: discord.Member = None, game_name: str = None) -> discord.Embed:
+        """Create the compact header embed shown in the channel (before thread)."""
+        status = task.status or 'todo'
+        role_style = self._get_role_style(assignee)
         
-        # Thread link if exists
-        if task.thread_id:
-            embed.add_field(name="Discussion", value=f"<#{task.thread_id}>", inline=True)
+        # Use status color if not todo, otherwise use role color
+        if status == 'todo':
+            color = role_style['color']
+        else:
+            color = STATUS_COLORS.get(status, discord.Color.greyple())
         
-        # Footer with task ID and timestamps
-        footer_parts = [f"Task #{task.id}"]
-        if task.created_at:
-            created_str = str(task.created_at)[:10] if task.created_at else None
-            if created_str:
-                footer_parts.append(f"Created: {created_str}")
-        embed.set_footer(text=" | ".join(footer_parts))
+        # Compact title with role label
+        embed = discord.Embed(
+            title=f"{role_style['emoji']} {role_style['label']}: {task.title}",
+            color=color
+        )
         
+        # Assignee
+        if assignee:
+            embed.add_field(name="Assigned", value=assignee.mention, inline=True)
+        else:
+            embed.add_field(name="Assigned", value=f"<@{task.assignee_id}>", inline=True)
+        
+        # Status
+        embed.add_field(
+            name="Status", 
+            value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", 
+            inline=True
+        )
+        
+        # Priority (if set)
+        if task.priority:
+            priority_emoji = PRIORITY_EMOJI.get(task.priority, '')
+            embed.add_field(name="Priority", value=f"{priority_emoji} {task.priority}", inline=True)
+        
+        # Deadline (if set)
+        if task.deadline:
+            embed.add_field(name="Due", value=str(task.deadline)[:10], inline=True)
+        
+        # Footer with task ID
+        embed.set_footer(text=f"#{task.id} | {game_name or task.game_acronym}")
+
         return embed
 
     async def update_header_message(self, interaction: discord.Interaction, task: Task):
