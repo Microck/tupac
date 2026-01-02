@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
   - Merge mode: add/update entries without removing existing
   - Replace mode: clear template and import fresh
 
+### Changed
+- Updated `.gitignore` with venv, IDE, and common patterns
+
+### Removed
+- `FEATURE_TASK_MANAGEMENT.md` and `PLAN.md` spec files
+
 ## [1.1.0] - 2026-01-02
 
 ### Added
