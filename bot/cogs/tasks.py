@@ -312,6 +312,19 @@ class TaskView(discord.ui.View):
             return False
         return True
 
+    async def check_assignee_or_lead(self, interaction: discord.Interaction) -> bool:
+        """Check if user is assignee OR a lead/admin."""
+        task = await get_task(self.task_id)
+        if interaction.user.id == task.assignee_id:
+            return True
+        if interaction.user.guild_permissions.administrator:
+            return True
+        lead_roles = [r for r in interaction.user.roles if 'lead' in r.name.lower() or 'admin' in r.name.lower()]
+        if lead_roles:
+            return True
+        await interaction.response.send_message("Only the assignee or leads can use this button.", ephemeral=True)
+        return False
+
     async def check_lead(self, interaction: discord.Interaction) -> bool:
         # Check if user has admin perms or a Lead role
         if interaction.user.guild_permissions.administrator:
@@ -396,7 +409,7 @@ class TaskView(discord.ui.View):
 
     @discord.ui.button(label='Submit for Review', style=discord.ButtonStyle.success, emoji='\u2705', custom_id='task_review')
     async def review_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.check_assignee(interaction):
+        if not await self.check_assignee_or_lead(interaction):
             return
 
         task = await get_task(self.task_id)
@@ -410,6 +423,7 @@ class TaskView(discord.ui.View):
 
         task.status = 'review'
         await self.cog.update_control_panel(interaction, task)
+        await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.game_acronym, interaction.client)
 
         # Notify leads
@@ -433,19 +447,21 @@ class TaskView(discord.ui.View):
 
     @discord.ui.button(label='Approve & Close', style=discord.ButtonStyle.danger, emoji='\U0001f3c1', custom_id='task_approve')
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.check_lead(interaction):
+        if not await self.check_assignee_or_lead(interaction):
             return
 
         task = await get_task(self.task_id)
-        if task.status != 'review':
-            await interaction.response.send_message("Task must be 'In Review' to approve.", ephemeral=True)
+        if task.status not in ['todo', 'progress', 'review']:
+            await interaction.response.send_message("Task is already completed.", ephemeral=True)
             return
 
+        old_status = task.status
         await update_task_status(self.task_id, 'done')
-        await add_task_history(self.task_id, interaction.user.id, 'status_change', 'review', 'done')
+        await add_task_history(self.task_id, interaction.user.id, 'status_change', old_status, 'done')
 
         task.status = 'done'
         await self.cog.update_control_panel(interaction, task)
+        await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.game_acronym, interaction.client)
 
         # Archive and lock thread
@@ -734,7 +750,7 @@ class TasksCog(commands.Cog):
         thread = await header_msg.create_thread(name=f"Task: {title[:50]}")
 
         # Create control panel in thread
-        control_embed = self.create_control_embed(task, assignee)
+        control_embed = self.create_control_embed(task, assignee, game_name)
         view = TaskView(task.id, self)
         control_msg = await thread.send(embed=control_embed, view=view)
 
@@ -775,7 +791,7 @@ class TasksCog(commands.Cog):
         
         return ROLE_TASK_STYLE['default']
 
-    def create_control_embed(self, task: Task, assignee: discord.Member = None) -> discord.Embed:
+    def create_control_embed(self, task: Task, assignee: discord.Member = None, game_name: str = None) -> discord.Embed:
         """Create the detailed control panel embed shown inside the thread."""
         status = task.status or 'todo'
         role_style = self._get_role_style(assignee)
@@ -792,28 +808,50 @@ class TasksCog(commands.Cog):
             color=color
         )
         
-        # Status (prominent)
+        # Assignee
+        if assignee:
+            embed.add_field(name="Assignee", value=assignee.mention, inline=True)
+        else:
+            embed.add_field(name="Assignee", value=f"<@{task.assignee_id}>", inline=True)
+        
+        # Status
         embed.add_field(
             name="Status", 
             value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", 
             inline=True
         )
         
+        # Project
+        if game_name:
+            embed.add_field(name="Project", value=f"\U0001f3ae {game_name}", inline=True)
+        elif task.game_acronym:
+            embed.add_field(name="Project", value=f"\U0001f3ae {task.game_acronym}", inline=True)
+        
         # Priority
         if task.priority:
             priority_emoji = PRIORITY_EMOJI.get(task.priority, '')
             embed.add_field(name="Priority", value=f"{priority_emoji} {task.priority}", inline=True)
+        else:
+            embed.add_field(name="Priority", value="Not set", inline=True)
         
         # Deadline
         if task.deadline:
             embed.add_field(name="Deadline", value=f"\U0001f4c5 {str(task.deadline)[:10]}", inline=True)
+        else:
+            embed.add_field(name="Deadline", value="Not set", inline=True)
         
         # ETA (assignee sets this)
         if task.eta:
-            embed.add_field(name="Your ETA", value=f"\u23f0 {task.eta}", inline=True)
+            embed.add_field(name="ETA", value=f"\u23f0 {task.eta}", inline=True)
+        else:
+            embed.add_field(name="ETA", value="Not set", inline=True)
+        
+        # Created date
+        if task.created_at:
+            embed.add_field(name="Created", value=str(task.created_at)[:10], inline=True)
         
         # Footer
-        embed.set_footer(text=f"Task #{task.id} | Use buttons below to update")
+        embed.set_footer(text=f"Task #{task.id} | Use buttons below to update status")
 
         return embed
 
@@ -828,7 +866,10 @@ class TasksCog(commands.Cog):
                 msg = await thread.fetch_message(task.control_message_id)
                 # Try to get assignee for role styling
                 assignee = interaction.guild.get_member(task.assignee_id)
-                embed = self.create_control_embed(task, assignee)
+                # Get game name
+                game_obj = await get_game_by_acronym(task.game_acronym)
+                game_name = game_obj.name if game_obj else None
+                embed = self.create_control_embed(task, assignee, game_name)
                 view = TaskView(task.id, self) if task.status not in ('done', 'cancelled') else None
                 await msg.edit(embed=embed, view=view)
         except discord.NotFound:
@@ -837,7 +878,7 @@ class TasksCog(commands.Cog):
             pass
 
     def create_header_embed(self, task: Task, assignee: discord.Member = None, game_name: str = None) -> discord.Embed:
-        """Create the compact header embed shown in the channel (before thread)."""
+        """Create minimal header embed shown in the channel (before thread)."""
         status = task.status or 'todo'
         role_style = self._get_role_style(assignee)
         
@@ -847,17 +888,17 @@ class TasksCog(commands.Cog):
         else:
             color = STATUS_COLORS.get(status, discord.Color.greyple())
         
-        # Compact title with role label
+        # Minimal: just emoji + title
         embed = discord.Embed(
-            title=f"{role_style['emoji']} {role_style['label']}: {task.title}",
+            title=f"{role_style['emoji']} {task.title}",
             color=color
         )
         
-        # Assignee
+        # Assignee only
         if assignee:
-            embed.add_field(name="Assigned", value=assignee.mention, inline=True)
+            embed.add_field(name="Assigned to", value=assignee.mention, inline=True)
         else:
-            embed.add_field(name="Assigned", value=f"<@{task.assignee_id}>", inline=True)
+            embed.add_field(name="Assigned to", value=f"<@{task.assignee_id}>", inline=True)
         
         # Status
         embed.add_field(
@@ -865,18 +906,6 @@ class TasksCog(commands.Cog):
             value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", 
             inline=True
         )
-        
-        # Priority (if set)
-        if task.priority:
-            priority_emoji = PRIORITY_EMOJI.get(task.priority, '')
-            embed.add_field(name="Priority", value=f"{priority_emoji} {task.priority}", inline=True)
-        
-        # Deadline (if set)
-        if task.deadline:
-            embed.add_field(name="Due", value=str(task.deadline)[:10], inline=True)
-        
-        # Footer with task ID
-        embed.set_footer(text=f"#{task.id} | {game_name or task.game_acronym}")
 
         return embed
 
@@ -972,6 +1001,94 @@ class TasksCog(commands.Cog):
 
         await upsert_task_board(game, interaction.channel.id, json.dumps(msg_ids))
         await interaction.followup.send("Task board created!")
+
+    @task_group.command(name="setup", description="Set up a task board channel for a game")
+    @app_commands.describe(
+        game="Game acronym",
+        channel="Channel to use as the task board (current channel if not specified)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def task_setup(
+        self,
+        interaction: discord.Interaction,
+        game: str,
+        channel: discord.TextChannel = None
+    ):
+        """Set up or update the task board channel for a game."""
+        await interaction.response.defer()
+
+        game_obj = await get_game_by_acronym(game)
+        if not game_obj:
+            await interaction.followup.send(f"Game `{game}` not found.")
+            return
+
+        target_channel = channel or interaction.channel
+
+        # Check if board already exists
+        existing_board = await get_task_board(game)
+        if existing_board:
+            # Delete old board messages if possible
+            try:
+                old_channel = interaction.guild.get_channel(existing_board.channel_id)
+                if old_channel:
+                    msg_ids = json.loads(existing_board.message_ids)
+                    for msg_id in msg_ids:
+                        try:
+                            msg = await old_channel.fetch_message(msg_id)
+                            await msg.delete()
+                        except discord.NotFound:
+                            pass
+            except (json.JSONDecodeError, discord.HTTPException):
+                pass
+
+        # Get tasks for this game
+        tasks = await get_tasks_by_game(game)
+
+        # Group by status
+        by_status = {
+            'todo': [],
+            'progress': [],
+            'review': [],
+            'done': []
+        }
+        for t in tasks:
+            if t.status in by_status:
+                by_status[t.status].append(t)
+
+        # Create header embed
+        header_embed = discord.Embed(
+            title=f"\U0001f4cb Task Board: {game_obj.name}",
+            description=f"All tasks for **{game_obj.name}** ({game_obj.acronym})\nUpdates automatically when task status changes.",
+            color=discord.Color.blue()
+        )
+        await target_channel.send(embed=header_embed)
+
+        # Create status embeds
+        msg_ids = []
+        for status in ['todo', 'progress', 'review', 'done']:
+            embed = discord.Embed(
+                title=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}",
+                color=STATUS_COLORS.get(status, discord.Color.greyple())
+            )
+            
+            status_tasks = by_status[status]
+            if status_tasks:
+                desc_lines = []
+                for t in status_tasks[:10]:
+                    thread_link = f"<#{t.thread_id}>" if t.thread_id else ""
+                    assignee = f"<@{t.assignee_id}>"
+                    priority_str = f" [{t.priority}]" if t.priority else ""
+                    deadline_str = f" (Due: {str(t.deadline)[:10]})" if t.deadline else ""
+                    desc_lines.append(f"**{t.title}**{priority_str} - {assignee}{deadline_str}\n{thread_link}")
+                embed.description = "\n".join(desc_lines)
+            else:
+                embed.description = "*No tasks*"
+            
+            msg = await target_channel.send(embed=embed)
+            msg_ids.append(msg.id)
+
+        await upsert_task_board(game, target_channel.id, json.dumps(msg_ids))
+        await interaction.followup.send(f"Task board set up in {target_channel.mention}!")
 
     async def update_dashboard(self, game_acronym: str, bot: commands.Bot):
         """Update the dashboard for a game."""
@@ -1171,7 +1288,7 @@ class TasksCog(commands.Cog):
                 thread = await header_msg.create_thread(name=f"Task: {task.title[:50]}")
 
                 # Create control panel in thread
-                control_embed = self.create_control_embed(task, member)
+                control_embed = self.create_control_embed(task, member, game_name)
                 view = TaskView(task.id, self)
                 control_msg = await thread.send(embed=control_embed, view=view)
 
@@ -1287,6 +1404,7 @@ class TasksCog(commands.Cog):
 
     @task_create.autocomplete("game")
     @task_board.autocomplete("game")
+    @task_setup.autocomplete("game")
     async def game_autocomplete(self, interaction: discord.Interaction, current: str):
         games = await get_all_games()
         return [
