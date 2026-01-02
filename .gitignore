@@ -3,3 +3,15 @@ data/*.db
 __pycache__/
 *.pyc
 .DS_Store
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
