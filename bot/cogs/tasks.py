@@ -27,6 +27,7 @@ from ..database import (
     add_task_history,
     get_task_board,
     upsert_task_board,
+    delete_task,
 )
 from ..models import Task
 
@@ -1183,6 +1184,110 @@ class TasksCog(commands.Cog):
             )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # ============== TASK DELETE ==============
+
+    @task_group.command(name="delete", description="Delete a task by ID")
+    @app_commands.describe(task_id="Task ID to delete")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def task_delete(self, interaction: discord.Interaction, task_id: int):
+        await interaction.response.defer(ephemeral=True)
+
+        task = await get_task(task_id)
+        if not task:
+            await interaction.followup.send(f"Task #{task_id} not found.")
+            return
+
+        game_acronym = task.game_acronym
+
+        # Delete thread if exists
+        if task.thread_id:
+            try:
+                thread = interaction.guild.get_channel(task.thread_id)
+                if thread and isinstance(thread, discord.Thread):
+                    await thread.delete()
+            except discord.HTTPException:
+                pass
+
+        # Delete header message if exists
+        if task.header_message_id and task.target_channel_id:
+            try:
+                channel = interaction.guild.get_channel(task.target_channel_id)
+                if channel:
+                    msg = await channel.fetch_message(task.header_message_id)
+                    await msg.delete()
+            except discord.HTTPException:
+                pass
+
+        # Delete from database
+        await delete_task(task_id)
+
+        # Update dashboard
+        await self.update_dashboard(game_acronym, self.bot)
+
+        await interaction.followup.send(f"Task #{task_id} ({task.title}) deleted.")
+
+    @task_group.command(name="manage", description="List all tasks for a game with management options")
+    @app_commands.describe(game="Game acronym")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def task_manage(self, interaction: discord.Interaction, game: str):
+        await interaction.response.defer(ephemeral=True)
+
+        game_obj = await get_game_by_acronym(game)
+        if not game_obj:
+            await interaction.followup.send(f"Game `{game}` not found.")
+            return
+
+        tasks = await get_tasks_by_game(game)
+
+        if not tasks:
+            await interaction.followup.send(f"No tasks for {game_obj.name}.")
+            return
+
+        # Create embed with all tasks
+        embed = discord.Embed(
+            title=f"Task Management: {game_obj.name}",
+            description="Use `/task delete <id>` to remove a task.",
+            color=discord.Color.blue()
+        )
+
+        # Group by status
+        by_status = {}
+        for t in tasks:
+            if t.status not in by_status:
+                by_status[t.status] = []
+            by_status[t.status].append(t)
+
+        for status in ['todo', 'progress', 'review', 'done', 'cancelled']:
+            if status not in by_status:
+                continue
+            
+            status_tasks = by_status[status]
+            lines = []
+            for t in status_tasks[:8]:
+                assignee = f"<@{t.assignee_id}>"
+                priority = f" [{t.priority}]" if t.priority else ""
+                lines.append(f"`#{t.id}` **{t.title}**{priority} - {assignee}")
+            
+            if len(status_tasks) > 8:
+                lines.append(f"*... and {len(status_tasks) - 8} more*")
+            
+            embed.add_field(
+                name=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)} ({len(status_tasks)})",
+                value="\n".join(lines) or "*None*",
+                inline=False
+            )
+
+        await interaction.followup.send(embed=embed)
+
+    @task_manage.autocomplete("game")
+    async def task_manage_autocomplete(self, interaction: discord.Interaction, current: str):
+        games = await get_all_games()
+        return [
+            app_commands.Choice(name=f"{g.acronym} - {g.name}", value=g.acronym)
+            for g in games
+            if current.lower() in g.acronym.lower() or current.lower() in g.name.lower()
+        ][:25]
 
     # ============== TASK IMPORT ==============
 
