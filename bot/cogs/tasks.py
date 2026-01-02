@@ -724,7 +724,7 @@ class TasksCog(commands.Cog):
         embed = discord.Embed(
             title=task.title,
             description=task.description or "No description",
-            color=STATUS_COLORS.get(status, discord.Color.grey())
+            color=STATUS_COLORS.get(status, discord.Color.greyple())
         )
         
         if assignee:
@@ -776,7 +776,7 @@ class TasksCog(commands.Cog):
         embed = discord.Embed(
             title=f"{STATUS_EMOJI.get(status, '\U0001f4cb')} {task.title}",
             description="\n".join(desc_parts) if desc_parts else None,
-            color=STATUS_COLORS.get(status, discord.Color.grey())
+            color=STATUS_COLORS.get(status, discord.Color.greyple())
         )
         
         # Assignee
@@ -876,7 +876,7 @@ class TasksCog(commands.Cog):
         for status, status_tasks in by_status.items():
             embed = discord.Embed(
                 title=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}",
-                color=STATUS_COLORS.get(status, discord.Color.grey())
+                color=STATUS_COLORS.get(status, discord.Color.greyple())
             )
             
             if status_tasks:
@@ -957,7 +957,7 @@ class TasksCog(commands.Cog):
                     
                 embed = discord.Embed(
                     title=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}",
-                    color=STATUS_COLORS.get(status, discord.Color.grey())
+                    color=STATUS_COLORS.get(status, discord.Color.greyple())
                 )
                 
                 status_tasks = by_status[status]
