@@ -57,7 +57,8 @@ class Task:
     target_channel_id: int
     thread_id: Optional[int]
     control_message_id: Optional[int]  # The embed message ID in the thread
-    status: str  # todo, progress, review, done
+    header_message_id: Optional[int]  # The embed message ID in the channel (before thread)
+    status: str  # todo, progress, review, done, cancelled
     deadline: Optional[datetime]
     eta: Optional[str]
     priority: Optional[str]

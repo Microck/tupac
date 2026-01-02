@@ -21,6 +21,9 @@ from ..database import (
     update_task_thread,
     update_task_status,
     update_task_eta,
+    update_task_assignee,
+    update_task_priority,
+    update_task_header_message,
     add_task_history,
     get_task_board,
     upsert_task_board,
@@ -33,22 +36,197 @@ STATUS_DISPLAY = {
     'todo': 'To Do',
     'progress': 'In Progress',
     'review': 'In Review',
-    'done': 'Done'
+    'done': 'Done',
+    'cancelled': 'Cancelled'
 }
 
 STATUS_COLORS = {
     'todo': discord.Color.light_grey(),
     'progress': discord.Color.blue(),
     'review': discord.Color.orange(),
-    'done': discord.Color.green()
+    'done': discord.Color.green(),
+    'cancelled': discord.Color.dark_grey()
 }
 
 STATUS_EMOJI = {
     'todo': '\U0001f4cb',      # clipboard
     'progress': '\U0001f6a7',  # construction
     'review': '\U0001f50d',    # magnifying glass
-    'done': '\u2705'           # check mark
+    'done': '\u2705',          # check mark
+    'cancelled': '\u274c'      # x mark
 }
+
+PRIORITY_EMOJI = {
+    'Critical': '\U0001f534',  # red circle
+    'High': '\U0001f7e0',      # orange circle
+    'Medium': '\U0001f7e1',    # yellow circle
+    'Low': '\U0001f7e2',       # green circle
+}
+
+
+class ReassignModal(discord.ui.Modal, title='Reassign Task'):
+    user_id_input = discord.ui.TextInput(
+        label='New Assignee User ID',
+        placeholder='e.g., 123456789012345678',
+        required=True,
+        max_length=20
+    )
+    
+    def __init__(self, task_id: int, cog: 'TasksCog'):
+        super().__init__()
+        self.task_id = task_id
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        task = await get_task(self.task_id)
+        if not task:
+            await interaction.response.send_message("Task not found.", ephemeral=True)
+            return
+
+        try:
+            new_assignee_id = int(str(self.user_id_input))
+        except ValueError:
+            await interaction.response.send_message("Invalid user ID.", ephemeral=True)
+            return
+
+        new_assignee = interaction.guild.get_member(new_assignee_id)
+        if not new_assignee:
+            await interaction.response.send_message("User not found in this server.", ephemeral=True)
+            return
+
+        old_assignee_id = task.assignee_id
+        await update_task_assignee(self.task_id, new_assignee_id)
+        await add_task_history(self.task_id, interaction.user.id, 'reassign', str(old_assignee_id), str(new_assignee_id))
+
+        # Update control panel in thread
+        task.assignee_id = new_assignee_id
+        await self.cog.update_control_panel(interaction, task)
+        
+        # Update header message
+        await self.cog.update_header_message(interaction, task)
+        
+        # Notify new assignee in thread
+        if task.thread_id:
+            thread = interaction.guild.get_channel(task.thread_id)
+            if thread:
+                await thread.send(f"{new_assignee.mention} You have been assigned this task!")
+
+        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await interaction.response.send_message(f"Task reassigned to {new_assignee.mention}", ephemeral=True)
+
+
+class HeaderView(discord.ui.View):
+    """View attached to the header message (channel message before thread)."""
+    def __init__(self, task_id: int, cog: 'TasksCog'):
+        super().__init__(timeout=None)
+        self.task_id = task_id
+        self.cog = cog
+
+    async def check_lead(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.guild_permissions.administrator:
+            return True
+        lead_roles = [r for r in interaction.user.roles if 'lead' in r.name.lower() or 'admin' in r.name.lower()]
+        if not lead_roles:
+            await interaction.response.send_message("Only Leads/Admins can use this button.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label='View Thread', style=discord.ButtonStyle.primary, emoji='\U0001f4ac', custom_id='header_view_thread')
+    async def view_thread_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        task = await get_task(self.task_id)
+        if not task or not task.thread_id:
+            await interaction.response.send_message("Thread not found.", ephemeral=True)
+            return
+        
+        thread = interaction.guild.get_channel(task.thread_id)
+        if thread:
+            await interaction.response.send_message(f"Go to thread: {thread.jump_url}", ephemeral=True)
+        else:
+            await interaction.response.send_message("Thread not found.", ephemeral=True)
+
+    @discord.ui.button(label='Reassign', style=discord.ButtonStyle.secondary, emoji='\U0001f465', custom_id='header_reassign')
+    async def reassign_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.check_lead(interaction):
+            return
+        
+        modal = ReassignModal(self.task_id, self.cog)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label='Change Priority', style=discord.ButtonStyle.secondary, emoji='\u26a1', custom_id='header_priority')
+    async def priority_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.check_lead(interaction):
+            return
+        
+        # Show priority select
+        view = PrioritySelectView(self.task_id, self.cog)
+        await interaction.response.send_message("Select new priority:", view=view, ephemeral=True)
+
+    @discord.ui.button(label='Cancel Task', style=discord.ButtonStyle.danger, emoji='\u274c', custom_id='header_cancel')
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.check_lead(interaction):
+            return
+        
+        task = await get_task(self.task_id)
+        if not task:
+            await interaction.response.send_message("Task not found.", ephemeral=True)
+            return
+
+        if task.status == 'done':
+            await interaction.response.send_message("Task is already completed.", ephemeral=True)
+            return
+
+        old_status = task.status
+        await update_task_status(self.task_id, 'cancelled')
+        await add_task_history(self.task_id, interaction.user.id, 'status_change', old_status, 'cancelled')
+
+        # Update embeds
+        task.status = 'cancelled'
+        await self.cog.update_control_panel(interaction, task)
+        await self.cog.update_header_message(interaction, task)
+        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+
+        # Archive thread
+        if task.thread_id:
+            thread = interaction.guild.get_channel(task.thread_id)
+            if thread and isinstance(thread, discord.Thread):
+                await thread.send(f"\u274c Task cancelled by {interaction.user.mention}")
+                await thread.edit(archived=True, locked=True)
+
+        await interaction.response.send_message("Task cancelled.", ephemeral=True)
+
+
+class PrioritySelectView(discord.ui.View):
+    def __init__(self, task_id: int, cog: 'TasksCog'):
+        super().__init__(timeout=60)
+        self.task_id = task_id
+        self.cog = cog
+
+    @discord.ui.select(
+        placeholder="Select priority...",
+        options=[
+            discord.SelectOption(label="Critical", value="Critical", emoji="\U0001f534"),
+            discord.SelectOption(label="High", value="High", emoji="\U0001f7e0"),
+            discord.SelectOption(label="Medium", value="Medium", emoji="\U0001f7e1"),
+            discord.SelectOption(label="Low", value="Low", emoji="\U0001f7e2"),
+        ]
+    )
+    async def priority_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        task = await get_task(self.task_id)
+        if not task:
+            await interaction.response.send_message("Task not found.", ephemeral=True)
+            return
+
+        old_priority = task.priority
+        new_priority = select.values[0]
+        await update_task_priority(self.task_id, new_priority)
+        await add_task_history(self.task_id, interaction.user.id, 'priority_change', old_priority, new_priority)
+
+        task.priority = new_priority
+        await self.cog.update_control_panel(interaction, task)
+        await self.cog.update_header_message(interaction, task)
+        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+
+        await interaction.response.send_message(f"Priority updated to: {new_priority}", ephemeral=True)
 
 
 class ETAModal(discord.ui.Modal, title='Update ETA'):
@@ -500,13 +678,14 @@ class TasksCog(commands.Cog):
             deadline=deadline
         )
 
-        # Create header message
-        header_embed = discord.Embed(
-            title=f"\U0001f4cb Task: {title}",
-            description=f"Assigned to: {assignee.mention}",
-            color=STATUS_COLORS['todo']
-        )
-        header_msg = await target_channel.send(embed=header_embed)
+        # Get game name for embed
+        game_obj = await get_game_by_acronym(game_acronym)
+        game_name = game_obj.name if game_obj else game_acronym
+
+        # Create header message with detailed embed and buttons
+        header_embed = self.create_header_embed(task, assignee, game_name)
+        header_view = HeaderView(task.id, self)
+        header_msg = await target_channel.send(embed=header_embed, view=header_view)
 
         # Create thread
         thread = await header_msg.create_thread(name=f"Task: {title[:50]}")
@@ -518,6 +697,15 @@ class TasksCog(commands.Cog):
 
         # Update task with thread/message IDs
         await update_task_thread(task.id, thread.id, control_msg.id)
+        await update_task_header_message(task.id, header_msg.id)
+        
+        # Update task object for later use
+        task.thread_id = thread.id
+        task.header_message_id = header_msg.id
+
+        # Update header embed with thread link
+        header_embed = self.create_header_embed(task, assignee, game_name)
+        await header_msg.edit(embed=header_embed, view=header_view)
 
         # Ping assignee
         await thread.send(f"{assignee.mention} You have been assigned this task!")
@@ -567,7 +755,88 @@ class TasksCog(commands.Cog):
             if thread:
                 msg = await thread.fetch_message(task.control_message_id)
                 embed = self.create_control_embed(task)
-                view = TaskView(task.id, self) if task.status != 'done' else None
+                view = TaskView(task.id, self) if task.status not in ('done', 'cancelled') else None
+                await msg.edit(embed=embed, view=view)
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            pass
+
+    def create_header_embed(self, task: Task, assignee: discord.Member = None, game_name: str = None) -> discord.Embed:
+        """Create the detailed header embed shown in the channel (before thread)."""
+        status = task.status or 'todo'
+        
+        # Build description with task details
+        desc_parts = []
+        if task.description:
+            # Truncate long descriptions
+            desc_text = task.description[:200] + "..." if len(task.description) > 200 else task.description
+            desc_parts.append(desc_text)
+        
+        embed = discord.Embed(
+            title=f"{STATUS_EMOJI.get(status, '\U0001f4cb')} {task.title}",
+            description="\n".join(desc_parts) if desc_parts else None,
+            color=STATUS_COLORS.get(status, discord.Color.grey())
+        )
+        
+        # Assignee
+        if assignee:
+            embed.add_field(name="Assignee", value=assignee.mention, inline=True)
+        else:
+            embed.add_field(name="Assignee", value=f"<@{task.assignee_id}>", inline=True)
+        
+        # Status
+        embed.add_field(
+            name="Status", 
+            value=f"{STATUS_EMOJI.get(status, '')} {STATUS_DISPLAY.get(status, status)}", 
+            inline=True
+        )
+        
+        # Priority
+        if task.priority:
+            priority_emoji = PRIORITY_EMOJI.get(task.priority, '')
+            embed.add_field(name="Priority", value=f"{priority_emoji} {task.priority}", inline=True)
+        
+        # Deadline
+        if task.deadline:
+            deadline_str = str(task.deadline)[:10]
+            embed.add_field(name="Deadline", value=f"\U0001f4c5 {deadline_str}", inline=True)
+        
+        # ETA
+        if task.eta:
+            embed.add_field(name="ETA", value=f"\u23f0 {task.eta}", inline=True)
+        
+        # Game
+        if game_name:
+            embed.add_field(name="Project", value=f"\U0001f3ae {game_name}", inline=True)
+        elif task.game_acronym:
+            embed.add_field(name="Project", value=f"\U0001f3ae {task.game_acronym}", inline=True)
+        
+        # Thread link if exists
+        if task.thread_id:
+            embed.add_field(name="Discussion", value=f"<#{task.thread_id}>", inline=True)
+        
+        # Footer with task ID and timestamps
+        footer_parts = [f"Task #{task.id}"]
+        if task.created_at:
+            created_str = str(task.created_at)[:10] if task.created_at else None
+            if created_str:
+                footer_parts.append(f"Created: {created_str}")
+        embed.set_footer(text=" | ".join(footer_parts))
+        
+        return embed
+
+    async def update_header_message(self, interaction: discord.Interaction, task: Task):
+        """Update the header message embed in the channel."""
+        if not task.header_message_id or not task.target_channel_id:
+            return
+
+        try:
+            channel = interaction.guild.get_channel(task.target_channel_id)
+            if channel:
+                msg = await channel.fetch_message(task.header_message_id)
+                embed = self.create_header_embed(task)
+                view = HeaderView(task.id, self) if task.status not in ('done', 'cancelled') else None
                 await msg.edit(embed=embed, view=view)
         except discord.NotFound:
             pass
@@ -835,20 +1104,34 @@ class TasksCog(commands.Cog):
                     priority=td.get('priority')
                 )
 
+                # Get game name for embed
+                game_obj = await get_game_by_acronym(game_acronym)
+                game_name = game_obj.name if game_obj else game_acronym
+
+                # Create header message with detailed embed and buttons
+                header_embed = self.create_header_embed(task, member, game_name)
+                header_view = HeaderView(task.id, self)
+                header_msg = await channel.send(embed=header_embed, view=header_view)
+                
                 # Create thread
-                header_embed = discord.Embed(
-                    title=f"\U0001f4cb Task: {task.title}",
-                    description=f"Assigned to: {member.mention}",
-                    color=STATUS_COLORS['todo']
-                )
-                header_msg = await channel.send(embed=header_embed)
                 thread = await header_msg.create_thread(name=f"Task: {task.title[:50]}")
 
+                # Create control panel in thread
                 control_embed = self.create_control_embed(task, member)
                 view = TaskView(task.id, self)
                 control_msg = await thread.send(embed=control_embed, view=view)
 
+                # Update task with thread/message IDs
                 await update_task_thread(task.id, thread.id, control_msg.id)
+                await update_task_header_message(task.id, header_msg.id)
+                
+                # Update task object and refresh header with thread link
+                task.thread_id = thread.id
+                task.header_message_id = header_msg.id
+                header_embed = self.create_header_embed(task, member, game_name)
+                await header_msg.edit(embed=header_embed, view=header_view)
+
+                # Notify assignee
                 await thread.send(f"{member.mention} You have been assigned this task!")
 
                 created += 1
@@ -972,3 +1255,5 @@ async def setup(bot: commands.Bot):
         for task in tasks:
             if task.thread_id:
                 bot.add_view(TaskView(task.id, cog))
+            if task.header_message_id:
+                bot.add_view(HeaderView(task.id, cog))
