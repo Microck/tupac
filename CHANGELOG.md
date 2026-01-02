@@ -17,16 +17,20 @@ All notable changes to this project will be documented in this file.
   - Reassign - reassign task to different user
   - Change Priority - dropdown to update priority
   - Cancel Task - cancel and archive thread
+- **Task Board Setup**
+  - `/task setup <game> [channel]` - configure task board channel
+  - Creates header + 4 status columns
+  - Auto-updates when tasks change status
 - **Database**
   - `header_message_id` field for tracking channel embed
   - `update_task_assignee`, `update_task_priority` functions
   - Auto-migration for existing databases
 
 ### Changed
-- Header embed (channel) now compact: title, assignee, status, priority, due date
-- Control embed (thread) now detailed: full description, all fields, action buttons
-- Removed duplicate info between header and control embeds
-- Task queries refactored to use helper function
+- Header embed (channel) now minimal: title, assignee, status only
+- Control embed (thread) now detailed: all fields including project, created date
+- Leads/admins can now submit tasks for review and close tasks (not just assignees)
+- Task board shows priority in task list
 
 ## [1.2.0] - 2026-01-02
 

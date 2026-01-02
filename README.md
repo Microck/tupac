@@ -147,17 +147,18 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 
 ```
 /task create <title> <desc> <channel> <assignee> [priority] [deadline] [game]
-/task board <game>          -> show task dashboard (4 status columns)
-/task list [user]           -> list active tasks
-/task import <file>         -> bulk import from JSON/XML
-/task help                  -> show detailed help
+/task setup <game> [channel]  -> set up task board in channel
+/task board <game>            -> show/refresh task dashboard
+/task list [user]             -> list active tasks
+/task import <file>           -> bulk import from JSON/XML
+/task help                    -> show detailed help
 ```
 
 **task workflow:**
 1. admin creates task -> thread spawned in target channel
 2. assignee clicks `Start` -> status becomes "In Progress"
-3. assignee clicks `Submit for Review` -> leads notified
-4. lead clicks `Approve & Close` -> task done, thread archived
+3. assignee/lead clicks `Submit for Review` -> leads notified
+4. assignee/lead clicks `Approve & Close` -> task done, thread archived
 
 **header buttons (in channel, lead/admin only):**
 - `View Thread` - jump to discussion thread
@@ -165,12 +166,12 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 - `Change Priority` - update priority level
 - `Cancel Task` - cancel and archive
 
-**thread buttons (assignee):**
+**thread buttons (assignee or lead):**
 - `Start` / `Pause` - toggle work status
 - `Update ETA` - set estimated completion
 - `Question` - ping leads for help
 - `Submit for Review` - request approval
-- `Approve & Close` (lead only) - complete task
+- `Approve & Close` - complete task
 
 **role-based styling:**
 - tasks styled by assignee role (Coder=blue/laptop, Artist=purple/palette, etc)
@@ -211,6 +212,7 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 | `/group list` | list groups and emojis |
 | `/group emoji` | change a group's emoji |
 | `/task create` | create task with thread |
+| `/task setup` | set up task board channel |
 | `/task board` | show/refresh task dashboard |
 | `/task list` | list active tasks |
 | `/task import` | bulk import tasks from file |
