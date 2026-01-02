@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-01-02
+
+### Added
+- **Enhanced Task Embeds**
+  - Role-based task styling (Coder=blue, Artist=purple, Audio=gold, Writer=teal, QA=red)
+  - Role-specific emoji and labels (e.g., "Code Task:", "Art Task:")
+  - Priority parameter on `/task create` with dropdown choices
+  - Cancelled task status support
+- **Header Message Buttons** (for leads/admins)
+  - View Thread - quick link to discussion
+  - Reassign - reassign task to different user
+  - Change Priority - dropdown to update priority
+  - Cancel Task - cancel and archive thread
+- **Database**
+  - `header_message_id` field for tracking channel embed
+  - `update_task_assignee`, `update_task_priority` functions
+  - Auto-migration for existing databases
+
+### Changed
+- Header embed (channel) now compact: title, assignee, status, priority, due date
+- Control embed (thread) now detailed: full description, all fields, action buttons
+- Removed duplicate info between header and control embeds
+- Task queries refactored to use helper function
+
 ## [1.2.0] - 2026-01-02
 
 ### Added

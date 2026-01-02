@@ -146,7 +146,7 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 #### 5. task management
 
 ```
-/task create <title> <desc> <channel> <assignee> [deadline] [game]
+/task create <title> <desc> <channel> <assignee> [priority] [deadline] [game]
 /task board <game>          -> show task dashboard (4 status columns)
 /task list [user]           -> list active tasks
 /task import <file>         -> bulk import from JSON/XML
@@ -159,12 +159,22 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 3. assignee clicks `Submit for Review` -> leads notified
 4. lead clicks `Approve & Close` -> task done, thread archived
 
-**task buttons (in thread):**
+**header buttons (in channel, lead/admin only):**
+- `View Thread` - jump to discussion thread
+- `Reassign` - assign to different user
+- `Change Priority` - update priority level
+- `Cancel Task` - cancel and archive
+
+**thread buttons (assignee):**
 - `Start` / `Pause` - toggle work status
 - `Update ETA` - set estimated completion
 - `Question` - ping leads for help
 - `Submit for Review` - request approval
 - `Approve & Close` (lead only) - complete task
+
+**role-based styling:**
+- tasks styled by assignee role (Coder=blue/laptop, Artist=purple/palette, etc)
+- priority levels: Critical, High, Medium, Low
 
 **automation:**
 - reminders for tasks due within 24 hours
