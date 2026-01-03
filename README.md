@@ -5,7 +5,7 @@
 <h1 align="center">tupac</h1>
 
 <p align="center">
-  discord bot for organizing game dev projects with auto-generated channels, roles, acronyms, and task management.
+  discord bot for organizing dev projects with auto-generated channels, roles, acronyms, and task management.
 </p>
 
 <p align="center">
