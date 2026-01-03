@@ -1,0 +1,82 @@
+[
+    {
+        "title": "Estructura de datos inicial",
+        "description": "Crear un script que detecte cuando un jugador entra al juego y le asigne sus valores iniciales: AP (Aura Points), su WinStreak y el tipo de Aura elegida",
+        "assignee_id": "1014124290209230949",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-03",
+        "priority": "High"
+    },
+    {
+        "title": "Loop de Farmeo",
+        "description": "Crear un bucle (while true do) que cada segundo sume AP a los jugadores que estén en el área de farmeo",
+        "assignee_id": "1014124290209230949",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-04",
+        "priority": "Medium"
+    },
+    {
+        "title": "Sistema de Duelos",
+        "description": "Un script que cada X tiempo elija a dos jugadores al azar. Usar un RemoteEvent para avisarles que el duelo ha empezado. Anclar la parte principal de sus personajes (HumanoidRootPart) para que no se muevan",
+        "assignee_id": "1014124290209230949",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-05",
+        "priority": "Medium"
+    },
+    {
+        "title": "Configuración de trabajo",
+        "description": "Descargar VSCode, instalar extensión de Rojo en VSCode, ir a https://github.com/rojo-rbx/rojo/releases y descargar Rojo.rbxm, descargar Roblox Studio, dale a Create new experience y arriba donde pone plugins abres la carpeta de plugins y arrastras Rojo.rbxm a esa carpeta y ya puedes cerrar el Roblox Studio. Luego pues tener el Github",
+        "assignee_id": "342779250912264194",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-03",
+        "priority": "High"
+    },
+    {
+        "title": "UI de Selección",
+        "description": "Crear una pantalla inicial para elegir entre Dino, Ninja o Robot cuando se entre al juego y que se lo comunique al servidor (es decir, a mi a bitem, asi que avisame cuando lo tengas hecho ya que creo que tienes que crear cosas en shared para que yo lo pueda pillar)",
+        "assignee_id": "342779250912264194",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-03",
+        "priority": "Medium"
+    },
+    {
+        "title": "HUD de Contadores",
+        "description": "Crear las etiquetas de texto que muestren el AP en tiempo real, la WinStreak y el tipo de Aura elegida",
+        "assignee_id": "342779250912264194",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-04",
+        "priority": "Medium"
+    },
+    {
+        "title": "Pantalla de Duelo Placeholder",
+        "description": "Crear una interfaz que aparezca cuando el RemoteEvent de Bitem se dispare, bloqueando la visión por unos segundos (ponle texto en plan 'Mariquita' o lo que quieras, es placeholder, antes de desaparecer",
+        "assignee_id": "342779250912264194",
+        "target_channel_id": "1456729148432318567",
+        "deadline": "2026-01-04",
+        "priority": "Medium"
+    },
+    {
+        "title": "Lobby",
+        "description": "Construir una plataforma de 256x256 studs (o el tamaño que consideres)",
+        "assignee_id": "850420085314027521",
+        "target_channel_id": "1456729149577367703",
+        "deadline": "2026-01-03",
+        "priority": "High"
+    },
+    {
+        "title": "Zona de Farmeo",
+        "description": "Delimitar visualmente el área donde se gana AP",
+        "assignee_id": "850420085314027521",
+        "target_channel_id": "1456729149577367703",
+        "deadline": "2026-01-03",
+        "priority": "Medium"
+    },
+    {
+        "title": "Puntos de Spawn",
+        "description": "Colocar los lugares donde aparecen los jugadores y donde se teletransportan para el duelo",
+        "assignee_id": "501420209760894987",
+        "target_channel_id": "1456729149577367703",
+        "deadline": "2026-01-04",
+        "priority": "Medium"
+    }
+  ]

@@ -152,6 +152,65 @@ class ApprovalModeSelect(discord.ui.Select):
         await self.view.advance_step(interaction)
 
 
+class SetupLandingView(discord.ui.View):
+    def __init__(self, guild_id: int, existing_config: dict = None):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.existing_config = existing_config
+
+    @discord.ui.button(label="Quick Setup", style=discord.ButtonStyle.success, emoji="⚡")
+    async def quick_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+
+        guild = interaction.guild
+
+        category = discord.utils.get(guild.categories, name="Tasks")
+        if not category:
+            category = await guild.create_category("Tasks")
+
+        board_channel = discord.utils.get(category.text_channels, name="task-board")
+        if not board_channel:
+            board_channel = await category.create_text_channel("task-board", topic="Task management dashboard")
+
+        questions_channel = discord.utils.get(category.text_channels, name="task-questions")
+        if not questions_channel:
+            questions_channel = await category.create_text_channel("task-questions", topic="Questions about tasks")
+
+        leads_channel = discord.utils.get(category.text_channels, name="task-leads")
+        if not leads_channel:
+            leads_channel = await category.create_text_channel("task-leads", topic="Lead notifications")
+
+        config = self.existing_config.copy() if self.existing_config else DEFAULT_CONFIG.copy()
+        config['channel_mode'] = 'global'
+        config['global_board_channel_id'] = board_channel.id
+        config['global_questions_channel_id'] = questions_channel.id
+        config['global_leads_channel_id'] = leads_channel.id
+
+        embed = discord.Embed(
+            title="⚡ Channels Created!",
+            description=(
+                f"Created task channels in **{category.name}** category:\n\n"
+                f"• {board_channel.mention} - task dashboard\n"
+                f"• {questions_channel.mention} - task questions\n"
+                f"• {leads_channel.mention} - lead notifications\n\n"
+                "Now let's configure lead roles and approval settings..."
+            ),
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+        view = SetupWizardView(self.guild_id, config)
+        view.step = 4
+        await view.start_from_step(interaction)
+        self.stop()
+
+    @discord.ui.button(label="Custom Setup", style=discord.ButtonStyle.primary, emoji="⚙️")
+    async def custom_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = SetupWizardView(self.guild_id, self.existing_config)
+        await view.start(interaction)
+        self.stop()
+
+
 class SetupWizardView(discord.ui.View):
     def __init__(self, guild_id: int, existing_config: dict = None):
         super().__init__(timeout=300)
@@ -164,6 +223,10 @@ class SetupWizardView(discord.ui.View):
     async def start(self, interaction: discord.Interaction):
         self.template_channels = await get_all_template_channels()
         await self.show_step(interaction)
+
+    async def start_from_step(self, interaction: discord.Interaction):
+        self.template_channels = await get_all_template_channels()
+        await self.show_step_followup(interaction)
 
     async def show_step(self, interaction: discord.Interaction):
         self.clear_items()
@@ -287,6 +350,38 @@ class SetupWizardView(discord.ui.View):
         self.template_channels = await get_all_template_channels()
         await self.show_step(interaction)
 
+    async def show_step_followup(self, interaction: discord.Interaction):
+        self.clear_items()
+        embed = self._get_step_embed()
+        self.message = await interaction.followup.send(embed=embed, view=self, ephemeral=True, wait=True)
+
+    def _get_step_embed(self) -> discord.Embed:
+        if self.step == 4:
+            embed = discord.Embed(
+                title="🔧 Task System Setup - Lead Roles",
+                description="**Lead Roles**\n\nSelect role(s) that should be considered 'Leads'.",
+                color=discord.Color.blue()
+            )
+            self.add_item(LeadRoleSelect())
+        elif self.step == 5:
+            embed = discord.Embed(
+                title="🔧 Task System Setup - Approval Mode",
+                description="**Task Approval Mode**\n\nWhen a task has multiple assignees, how should completion approval work?",
+                color=discord.Color.blue()
+            )
+            self.add_item(ApprovalModeSelect())
+        elif self.step == 6:
+            embed = self._create_summary_embed()
+            confirm_btn = discord.ui.Button(label="Confirm Setup", style=discord.ButtonStyle.success, emoji="✅")
+            confirm_btn.callback = self.confirm_setup
+            self.add_item(confirm_btn)
+            back_btn = discord.ui.Button(label="Start Over", style=discord.ButtonStyle.secondary, emoji="↩️")
+            back_btn.callback = self.restart_setup
+            self.add_item(back_btn)
+        else:
+            embed = discord.Embed(title="Setup", color=discord.Color.blue())
+        return embed
+
     async def confirm_setup(self, interaction: discord.Interaction):
         config_json = json.dumps(self.config)
         await upsert_server_config(self.guild_id, config_json, setup_completed=True)
@@ -320,8 +415,22 @@ class AdminCog(commands.Cog):
                 existing_config = json.loads(existing.config_json)
             except json.JSONDecodeError:
                 pass
-        view = SetupWizardView(interaction.guild.id, existing_config)
-        await view.start(interaction)
+
+        embed = discord.Embed(
+            title="🔧 Task System Setup",
+            description=(
+                "**⚡ Quick Setup**\n"
+                "Auto-creates a `Tasks` category with pre-configured channels "
+                "(task-board, task-questions, task-leads). Best for getting started fast.\n\n"
+                "**⚙️ Custom Setup**\n"
+                "Step-by-step wizard to configure channel mode, lead roles, "
+                "approval rules, and use existing channels."
+            ),
+            color=discord.Color.blue()
+        )
+
+        view = SetupLandingView(interaction.guild.id, existing_config)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @admin_group.command(name="status", description="Show current setup configuration")
     async def admin_status(self, interaction: discord.Interaction):

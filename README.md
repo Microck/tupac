@@ -50,6 +50,8 @@ python -m bot.main
 - **auto channels:** creates 25+ organized channels per game from a template
 - **smart acronyms:** "Neon Drift" -> ND, "The Great Escape" -> TGE
 - **role sync:** members with @Coder auto-get @ND-Coder for every game
+- **emoji groups:** channels prefixed by category (💻-nd-frontend, 🎨-nd-concept)
+- **live templates:** modify template, sync to all existing games instantly
 - **task management:** trello-style task tracking with threads, dashboards, automation
 - **multi-assignee:** assign multiple people to tasks with configurable approval rules
 - **setup wizard:** interactive `/admin setup` to configure task system
@@ -73,13 +75,16 @@ all commands organized into 4 groups:
 | | `/template add` | add channel to template |
 | | `/template remove` | remove from template |
 | | `/template sync` | sync template to all games |
-| | `/template export/import` | backup/restore template |
+| | `/template export` | download template as JSON |
+| | `/template import` | import template from JSON |
 | | `/template groups` | list groups and emojis |
 | | `/template emoji` | change a group's emoji |
 | **task** | `/task new` | create task with thread |
 | | `/task close [id]` | close task (run in thread or specify ID) |
 | | `/task list [user]` | list active tasks |
 | | `/task board <game>` | show/refresh task dashboard |
+| | `/task import <file>` | bulk import tasks from JSON/XML |
+| | `/task delete <id>` | delete a task |
 | | `/task help` | show detailed help |
 | **admin** | `/admin setup` | configure task system (wizard) |
 | | `/admin status` | show current config |
@@ -97,7 +102,10 @@ all commands organized into 4 groups:
 /game new "Neon Drift"
 ```
 
-creates category with 25 channels and game-specific roles.
+creates:
+- category with 25+ channels from template
+- game-specific roles: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA`
+- channels prefixed with acronym: `nd-general`, `nd-code-frontend`, etc.
 
 #### 2. manage members
 
@@ -109,41 +117,112 @@ creates category with 25 channels and game-specific roles.
 
 available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
 
-#### 3. create tasks
+members with base roles auto-get game roles (e.g., @Coder gets @ND-Coder)
+
+#### 3. manage templates
+
+```
+/template list                  -> view current template
+/template add <name> <group>    -> add channel to template
+/template remove <name>         -> remove from template
+/template sync                  -> apply changes to all games
+/template export                -> download as JSON
+/template import <file>         -> import from JSON
+```
+
+#### 4. create tasks
 
 ```
 /task new <title> <description> <channel> <assignee> [priority] [deadline]
 ```
 
 - creates thread in target channel
-- supports multiple assignees (comma-separated IDs)
-- first assignee becomes primary owner
+- supports multiple assignees via `additional_assignees` parameter
+- first assignee becomes primary owner (can close solo)
 
-#### 4. task workflow
+#### 5. task workflow
 
-1. admin creates task -> thread spawned
-2. assignee clicks `Start` -> "In Progress"
+1. admin creates task -> thread spawned in target channel
+2. assignee clicks `Start` -> status becomes "In Progress"
 3. click `Submit for Review` -> leads notified
-4. click `Approve & Close` or `/task close` -> done, thread archived
+4. click `Approve & Close` or `/task close` -> task done, thread archived
 
-**buttons:**
-- `Manage Team` - add/remove members, set primary
+**header buttons (in channel):**
+- `View Thread` - jump to discussion thread
+- `Manage Team` - add/remove members, set primary owner
+- `Change Priority` - update priority level
+- `Cancel Task` - cancel and archive
+
+**thread buttons (in task thread):**
 - `Start/Pause` - toggle work status
-- `Update ETA` - set completion estimate
+- `Update ETA` - set estimated completion
 - `Question` - ping leads for help
+- `Submit for Review` - request approval
+- `Approve & Close` - complete task
 
-#### 5. server setup
+#### 6. server setup
 
 ```
-/admin setup    -> interactive wizard
+/admin setup    -> choose Quick Setup or Custom Setup
 /admin status   -> view current config
-/admin migrate  -> sync existing tasks
+/admin migrate  -> sync existing tasks to multi-assignee
 ```
+
+**Quick Setup** - auto-creates `Tasks` category with `task-board`, `task-questions`, `task-leads` channels, then configures lead roles and approval mode.
+
+**Custom Setup** - full wizard to choose channel mode (per-game vs global), select existing channels or create new ones, configure lead roles and approval mode.
+
+---
+
+### channel groups
+
+| group | emoji | channels |
+|-------|-------|----------|
+| general | 💬 | announcements, general, brainstorming, tasks |
+| code | 💻 | frontend, backend, gamelogic, networking, bugs |
+| design | 🎨 | gui, 3d, 2d, animation, vfx, concept |
+| audio | 🔊 | music, sfx |
+| writing | ✍️ | story, dialogue, copy |
+| qa | 🧪 | playtesting, feedback |
+| resources | 📚 | refs, tools |
+| voice | 🎙️ | voice channel |
+
+---
+
+### template import/export format
+
+```json
+{
+  "groups": [
+    {"name": "general", "emoji": "💬"},
+    {"name": "code", "emoji": "💻"}
+  ],
+  "channels": [
+    {
+      "name": "announcements",
+      "group": "general",
+      "is_voice": false,
+      "description": "Project updates"
+    },
+    {
+      "name": "voice",
+      "group": "voice",
+      "is_voice": true,
+      "description": null
+    }
+  ]
+}
+```
+
+import modes:
+- `merge` (default): add new entries, update existing
+- `replace`: clear template, import fresh
 
 ---
 
 ### task import format
 
+**JSON:**
 ```json
 [
   {
@@ -156,6 +235,19 @@ available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
     "additional_assignees": "111222333,444555666"
   }
 ]
+```
+
+**XML:**
+```xml
+<tasks>
+  <task>
+    <title>Compose Main Theme</title>
+    <description>Orchestral track for main menu</description>
+    <assignee_id>123456789012345678</assignee_id>
+    <target_channel_id>555444333222111000</target_channel_id>
+    <deadline>2026-04-15</deadline>
+  </task>
+</tasks>
 ```
 
 use `/admin channels` and `/admin members` to get IDs.
@@ -191,7 +283,9 @@ gamedev-discord-bot/
 
 **permission errors** - move bot role higher in server role list
 
-**task threads not working** - bot needs "Create Public Threads" permission
+**acronym conflicts** - if "ND" exists, new game becomes "ND2", or specify custom: `/game new "Name" acronym:XYZ`
+
+**task threads not working** - bot needs "Create Public Threads" and "Send Messages in Threads" permissions
 
 ---
 
