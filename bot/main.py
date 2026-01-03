@@ -18,8 +18,8 @@ class GameDevBot(commands.Bot):
         await self.load_extension("bot.cogs.templates")
         await self.load_extension("bot.cogs.games")
         await self.load_extension("bot.cogs.tasks")
+        await self.load_extension("bot.cogs.setup")
         
-        # Sync commands to guild
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
             self.tree.copy_global_to(guild=guild)

@@ -2,7 +2,7 @@ import aiosqlite
 from typing import List, Optional, Set
 
 from .config import DATABASE_PATH, DEFAULT_GROUPS, DEFAULT_TEMPLATE
-from .models import Game, Group, TemplateChannel, GameChannel, GameRole, Task, TaskHistory, TaskBoard
+from .models import Game, Group, TemplateChannel, GameChannel, GameRole, Task, TaskHistory, TaskBoard, TaskAssignee, ServerConfig
 
 
 async def init_db():
@@ -88,6 +88,28 @@ async def init_db():
                 channel_id INTEGER NOT NULL,
                 message_ids TEXT NOT NULL
             );
+
+            -- Multi-assignee support
+            CREATE TABLE IF NOT EXISTS task_assignees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                is_primary BOOLEAN DEFAULT 0,
+                has_approved BOOLEAN DEFAULT 0,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                UNIQUE(task_id, user_id)
+            );
+
+            -- Server configuration
+            CREATE TABLE IF NOT EXISTS server_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL UNIQUE,
+                config_json TEXT NOT NULL DEFAULT '{}',
+                setup_completed BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         
         # Migration: Add header_message_id column if it doesn't exist
@@ -95,6 +117,16 @@ async def init_db():
         columns = [row[1] for row in await cursor.fetchall()]
         if 'header_message_id' not in columns:
             await db.execute("ALTER TABLE tasks ADD COLUMN header_message_id INTEGER")
+        
+        # Migration: Create task_assignees index for performance
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id 
+            ON task_assignees(task_id)
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_assignees_user_id 
+            ON task_assignees(user_id)
+        """)
         
         # Seed default groups if empty
         cursor = await db.execute("SELECT COUNT(*) FROM groups")
@@ -787,3 +819,239 @@ async def upsert_task_board(game_acronym: str, channel_id: int, message_ids: str
             channel_id=channel_id,
             message_ids=message_ids
         )
+
+
+# ============== TASK ASSIGNEES ==============
+
+async def add_task_assignee(task_id: int, user_id: int, is_primary: bool = False) -> TaskAssignee:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """INSERT INTO task_assignees (task_id, user_id, is_primary)
+               VALUES (?, ?, ?)
+               ON CONFLICT(task_id, user_id) DO UPDATE SET is_primary = excluded.is_primary""",
+            (task_id, user_id, is_primary)
+        )
+        await db.commit()
+        return TaskAssignee(
+            id=cursor.lastrowid,
+            task_id=task_id,
+            user_id=user_id,
+            is_primary=is_primary,
+            has_approved=False
+        )
+
+
+async def remove_task_assignee(task_id: int, user_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "DELETE FROM task_assignees WHERE task_id = ? AND user_id = ?",
+            (task_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def get_task_assignees(task_id: int) -> List[TaskAssignee]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM task_assignees WHERE task_id = ? ORDER BY is_primary DESC, added_at ASC",
+            (task_id,)
+        )
+        rows = await cursor.fetchall()
+        return [
+            TaskAssignee(
+                id=r["id"],
+                task_id=r["task_id"],
+                user_id=r["user_id"],
+                is_primary=bool(r["is_primary"]),
+                has_approved=bool(r["has_approved"]),
+                added_at=r["added_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_task_primary_assignee(task_id: int) -> Optional[TaskAssignee]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM task_assignees WHERE task_id = ? AND is_primary = 1",
+            (task_id,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return TaskAssignee(
+                id=row["id"],
+                task_id=row["task_id"],
+                user_id=row["user_id"],
+                is_primary=True,
+                has_approved=bool(row["has_approved"]),
+                added_at=row["added_at"]
+            )
+        return None
+
+
+async def set_task_primary_assignee(task_id: int, user_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE task_assignees SET is_primary = 0 WHERE task_id = ?",
+            (task_id,)
+        )
+        cursor = await db.execute(
+            "UPDATE task_assignees SET is_primary = 1 WHERE task_id = ? AND user_id = ?",
+            (task_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def clear_task_primary_assignee(task_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE task_assignees SET is_primary = 0 WHERE task_id = ?",
+            (task_id,)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def set_task_assignee_approval(task_id: int, user_id: int, approved: bool) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE task_assignees SET has_approved = ? WHERE task_id = ? AND user_id = ?",
+            (approved, task_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def get_task_approval_status(task_id: int) -> dict:
+    assignees = await get_task_assignees(task_id)
+    total = len(assignees)
+    approved = sum(1 for a in assignees if a.has_approved)
+    primary = next((a for a in assignees if a.is_primary), None)
+    return {
+        'total': total,
+        'approved': approved,
+        'primary': primary,
+        'assignees': assignees
+    }
+
+
+async def reset_task_approvals(task_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE task_assignees SET has_approved = 0 WHERE task_id = ?",
+            (task_id,)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def is_user_task_assignee(task_id: int, user_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?",
+            (task_id, user_id)
+        )
+        return await cursor.fetchone() is not None
+
+
+async def get_tasks_by_assignee_multi(user_id: int) -> List[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """SELECT t.* FROM tasks t
+               JOIN task_assignees ta ON t.id = ta.task_id
+               WHERE ta.user_id = ? AND t.status NOT IN ('done', 'cancelled')
+               ORDER BY t.deadline ASC""",
+            (user_id,)
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_task(r) for r in rows]
+
+
+async def get_all_tasks() -> List[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM tasks ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [_row_to_task(r) for r in rows]
+
+
+async def migrate_tasks_to_multi_assignee() -> dict:
+    """Migrate existing tasks to multi-assignee system. Returns stats."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        cursor = await db.execute("SELECT id, assignee_id FROM tasks WHERE assignee_id IS NOT NULL")
+        tasks = await cursor.fetchall()
+        
+        migrated = 0
+        skipped = 0
+        
+        for task in tasks:
+            existing = await db.execute(
+                "SELECT 1 FROM task_assignees WHERE task_id = ?",
+                (task["id"],)
+            )
+            if await existing.fetchone():
+                skipped += 1
+                continue
+            
+            await db.execute(
+                """INSERT INTO task_assignees (task_id, user_id, is_primary, has_approved)
+                   VALUES (?, ?, 1, 0)""",
+                (task["id"], task["assignee_id"])
+            )
+            migrated += 1
+        
+        await db.commit()
+        return {"migrated": migrated, "skipped": skipped, "total": len(tasks)}
+
+
+# ============== SERVER CONFIG ==============
+
+async def get_server_config(guild_id: int) -> Optional[ServerConfig]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM server_config WHERE guild_id = ?",
+            (guild_id,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return ServerConfig(
+                id=row["id"],
+                guild_id=row["guild_id"],
+                config_json=row["config_json"],
+                setup_completed=bool(row["setup_completed"])
+            )
+        return None
+
+
+async def upsert_server_config(guild_id: int, config_json: str, setup_completed: bool = False) -> ServerConfig:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO server_config (guild_id, config_json, setup_completed)
+               VALUES (?, ?, ?)
+               ON CONFLICT(guild_id) DO UPDATE SET
+               config_json = excluded.config_json,
+               setup_completed = excluded.setup_completed,
+               updated_at = CURRENT_TIMESTAMP""",
+            (guild_id, config_json, setup_completed)
+        )
+        await db.commit()
+        return ServerConfig(
+            id=None,
+            guild_id=guild_id,
+            config_json=config_json,
+            setup_completed=setup_completed
+        )
+
+
+async def is_setup_completed(guild_id: int) -> bool:
+    config = await get_server_config(guild_id)
+    return config.setup_completed if config else False
+

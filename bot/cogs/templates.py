@@ -29,10 +29,7 @@ class TemplatesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
     
-    template_group = app_commands.Group(name="template", description="Manage channel templates")
-    group_cmd = app_commands.Group(name="group", description="Manage channel groups")
-    
-    # ============== TEMPLATE COMMANDS ==============
+    template_group = app_commands.Group(name="template", description="Manage channel templates and groups")
     
     @template_group.command(name="list", description="List all template channels")
     @app_commands.checks.has_permissions(administrator=True)
@@ -44,7 +41,6 @@ class TemplatesCog(commands.Cog):
             await interaction.response.send_message("No template channels configured.")
             return
         
-        # Group channels by group_name
         by_group = {}
         for ch in channels:
             if ch.group_name not in by_group:
@@ -83,44 +79,30 @@ class TemplatesCog(commands.Cog):
         description: str = None,
         is_voice: bool = False
     ):
-        # Validate group exists
         group_obj = await get_group(group)
         if not group_obj:
             groups = await get_all_groups()
             group_names = ", ".join(g.name for g in groups)
-            await interaction.response.send_message(
-                f"Group `{group}` not found. Available groups: {group_names}"
-            )
+            await interaction.response.send_message(f"Group `{group}` not found. Available: {group_names}")
             return
         
-        # Normalize name
         name = name.lower().replace(" ", "-")
-        
         success = await add_template_channel(name, group, is_voice, description)
         if success:
-            await interaction.response.send_message(
-                f"Added `{name}` to template in group `{group}`."
-            )
+            await interaction.response.send_message(f"Added `{name}` to template in group `{group}`.")
         else:
-            await interaction.response.send_message(
-                f"Channel `{name}` already exists in template."
-            )
+            await interaction.response.send_message(f"Channel `{name}` already exists in template.")
     
     @template_group.command(name="remove", description="Remove a channel from the template")
     @app_commands.describe(name="Channel name to remove")
     @app_commands.checks.has_permissions(administrator=True)
     async def template_remove(self, interaction: discord.Interaction, name: str):
         name = name.lower().replace(" ", "-")
-        
         success = await remove_template_channel(name)
         if success:
-            await interaction.response.send_message(
-                f"Removed `{name}` from template."
-            )
+            await interaction.response.send_message(f"Removed `{name}` from template.")
         else:
-            await interaction.response.send_message(
-                f"Channel `{name}` not found in template."
-            )
+            await interaction.response.send_message(f"Channel `{name}` not found in template.")
     
     @template_group.command(name="sync", description="Sync template to all existing games")
     @app_commands.checks.has_permissions(administrator=True)
@@ -146,11 +128,9 @@ class TemplatesCog(commands.Cog):
                 errors.append(f"Category not found for {game.name}")
                 continue
             
-            # Get current non-custom channels
             game_channels = await get_non_custom_game_channels(game.id)
             game_channel_names = {ch.name for ch in game_channels}
             
-            # Add missing channels
             for template_ch in template_channels:
                 if template_ch.name not in game_channel_names:
                     emoji = groups.get(template_ch.group_name, "")
@@ -177,7 +157,6 @@ class TemplatesCog(commands.Cog):
                     except discord.HTTPException as e:
                         errors.append(f"Failed to create {channel_name}: {e}")
             
-            # Remove channels no longer in template
             for game_ch in game_channels:
                 if game_ch.name not in template_names:
                     channel = interaction.guild.get_channel(game_ch.channel_id)
@@ -187,7 +166,6 @@ class TemplatesCog(commands.Cog):
                             removed_count += 1
                         except discord.HTTPException as e:
                             errors.append(f"Failed to delete {game_ch.name}: {e}")
-                    
                     await db_remove_game_channel(game.id, game_ch.name)
         
         result = f"Sync complete.\nAdded: {added_count} channels\nRemoved: {removed_count} channels"
@@ -205,10 +183,7 @@ class TemplatesCog(commands.Cog):
         groups = await get_all_groups()
         
         export_data = {
-            "groups": [
-                {"name": g.name, "emoji": g.emoji}
-                for g in groups
-            ],
+            "groups": [{"name": g.name, "emoji": g.emoji} for g in groups],
             "channels": [
                 {
                     "name": ch.name,
@@ -221,10 +196,7 @@ class TemplatesCog(commands.Cog):
         }
         
         json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
-        file = discord.File(
-            io.BytesIO(json_str.encode('utf-8')),
-            filename="template.json"
-        )
+        file = discord.File(io.BytesIO(json_str.encode('utf-8')), filename="template.json")
         
         await interaction.response.send_message(
             f"Template exported: {len(groups)} groups, {len(channels)} channels",
@@ -264,11 +236,9 @@ class TemplatesCog(commands.Cog):
         channels_imported = 0
         errors = []
         
-        # Clear existing if replace mode
         if mode == "replace":
             await clear_template_channels()
         
-        # Import groups
         if "groups" in data:
             for g in data["groups"]:
                 try:
@@ -280,7 +250,6 @@ class TemplatesCog(commands.Cog):
                 except Exception as e:
                     errors.append(f"Group {g}: {e}")
         
-        # Import channels
         if "channels" in data:
             for ch in data["channels"]:
                 try:
@@ -292,7 +261,6 @@ class TemplatesCog(commands.Cog):
                     
                     is_voice = ch.get("is_voice", False)
                     description = ch.get("description")
-                    
                     await upsert_template_channel(name, group, is_voice, description)
                     channels_imported += 1
                 except Exception as e:
@@ -306,11 +274,9 @@ class TemplatesCog(commands.Cog):
         
         await interaction.followup.send(result)
     
-    # ============== GROUP COMMANDS ==============
-    
-    @group_cmd.command(name="list", description="List all groups and their emojis")
+    @template_group.command(name="groups", description="List all groups and their emojis")
     @app_commands.checks.has_permissions(administrator=True)
-    async def group_list(self, interaction: discord.Interaction):
+    async def template_groups(self, interaction: discord.Interaction):
         groups = await get_all_groups()
         
         if not groups:
@@ -318,48 +284,30 @@ class TemplatesCog(commands.Cog):
             return
         
         embed = discord.Embed(title="Channel Groups", color=discord.Color.green())
-        
         for group in groups:
-            embed.add_field(
-                name=f"{group.emoji} {group.name}",
-                value=f"Emoji: {group.emoji}",
-                inline=True
-            )
+            embed.add_field(name=f"{group.emoji} {group.name}", value=f"Emoji: {group.emoji}", inline=True)
         
         await interaction.response.send_message(embed=embed)
     
-    @group_cmd.command(name="emoji", description="Change a group's emoji")
-    @app_commands.describe(
-        group="Group name",
-        emoji="New emoji for the group"
-    )
+    @template_group.command(name="emoji", description="Change a group's emoji")
+    @app_commands.describe(group="Group name", emoji="New emoji for the group")
     @app_commands.checks.has_permissions(administrator=True)
-    async def group_emoji(self, interaction: discord.Interaction, group: str, emoji: str):
+    async def template_emoji(self, interaction: discord.Interaction, group: str, emoji: str):
         group_obj = await get_group(group)
         if not group_obj:
             groups = await get_all_groups()
             group_names = ", ".join(g.name for g in groups)
-            await interaction.response.send_message(
-                f"Group `{group}` not found. Available groups: {group_names}"
-            )
+            await interaction.response.send_message(f"Group `{group}` not found. Available: {group_names}")
             return
         
         old_emoji = group_obj.emoji
         await update_group_emoji(group, emoji)
-        
         await interaction.response.send_message(
-            f"Updated `{group}` emoji: {old_emoji} -> {emoji}\n"
-            f"Use `/template sync` to update existing channels."
+            f"Updated `{group}` emoji: {old_emoji} -> {emoji}\nUse `/template sync` to update existing channels."
         )
     
-    # ============== AUTOCOMPLETE ==============
-    
     @template_remove.autocomplete("name")
-    async def template_name_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str
-    ):
+    async def template_name_autocomplete(self, interaction: discord.Interaction, current: str):
         channels = await get_all_template_channels()
         return [
             app_commands.Choice(name=ch.name, value=ch.name)
@@ -368,12 +316,8 @@ class TemplatesCog(commands.Cog):
         ][:25]
     
     @template_add.autocomplete("group")
-    @group_emoji.autocomplete("group")
-    async def group_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str
-    ):
+    @template_emoji.autocomplete("group")
+    async def group_autocomplete(self, interaction: discord.Interaction, current: str):
         groups = await get_all_groups()
         return [
             app_commands.Choice(name=f"{g.emoji} {g.name}", value=g.name)

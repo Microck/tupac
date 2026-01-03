@@ -32,9 +32,7 @@
 git clone https://github.com/microck/tupac.git
 cd tupac
 cp .env.example .env
-
 # edit .env with your DISCORD_TOKEN and GUILD_ID
-
 docker compose up -d
 ```
 
@@ -49,191 +47,103 @@ python -m bot.main
 
 ### features
 
-organize your game dev discord with zero effort.
-
-- **auto channels:** creates 25+ organized channels per game from a template.
-- **smart acronyms:** "Neon Drift" -> ND, "The Great Escape" -> TGE.
-- **role sync:** members with @Coder auto-get @ND-Coder for every game.
-- **emoji groups:** channels prefixed by category (code-nd-code-frontend).
-- **channel descriptions:** each channel has a topic explaining its purpose.
-- **colored roles:** each game gets a unique color for its roles.
-- **live templates:** modify template, sync to all existing games instantly.
-- **task management:** trello-style task tracking with threads, dashboards, and automation.
-
----
-
-### how it works
-
-1. **create:** run `/newgame "Your Game Name"` - acronym auto-generated.
-2. **channels:** 25 channels created from template with emoji prefixes and descriptions.
-3. **roles:** game-specific roles created with random color and auto-assigned to team members.
-4. **customize:** add/remove channels per-game or modify the global template.
-5. **tasks:** create tasks with `/task create`, track on dashboard with `/task board`.
-
----
-
-### usage
-
-#### 1. assign member roles
-
-```
-/assign add @user Coder     -> assign Coder role (creates if missing)
-/assign add @user Artist    -> assign Artist role
-/assign remove @user Coder  -> remove Coder role
-/assign list                -> list all members with roles
-```
-
-available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
-
-#### 2. create a game
-
-```
-/newgame "Neon Drift"
-```
-
-creates:
-
-```
-Neon Drift
--- nd-announcements    (Project updates, milestones, and important news)
--- nd-general          (Casual chat and general discussion)
--- nd-brainstorming    (Ideas, concepts, and feature proposals)
--- nd-tasks            (Task assignments, todos, and progress tracking)
--- nd-code-frontend    (UI, menus, HUD, and client-side code)
--- nd-code-backend     (Server, database, and backend systems)
--- nd-code-gamelogic   (Game mechanics, physics, and core systems)
--- nd-code-networking  (Multiplayer, netcode, and online features)
--- nd-code-bugs        (Bug reports, debugging, and issue tracking)
--- nd-design-gui       (UI/UX design, menus, and interface mockups)
--- nd-design-3d        (3D models, textures, and environments)
--- nd-design-2d        (Sprites, textures, icons, and 2D artwork)
--- nd-design-animation (Character animations, rigging, and motion)
--- nd-design-vfx       (Particles, shaders, and visual effects)
--- nd-design-concept   (Concept art, sketches, and visual ideas)
--- nd-audio-music      (Soundtrack, themes, and background music)
--- nd-audio-sfx        (Sound effects, foley, and audio design)
--- nd-writing-story    (Narrative, lore, worldbuilding, and plot)
--- nd-writing-dialogue (Character dialogue and voice lines)
--- nd-writing-copy     (Marketing copy, descriptions, and text)
--- nd-qa-playtesting   (Playtest sessions, builds, and test plans)
--- nd-qa-feedback      (Tester feedback, reviews, and suggestions)
--- nd-resources-refs   (Reference images, inspiration, and research)
--- nd-resources-tools  (Tools, tutorials, and helpful resources)
--- nd-voice            (Voice chat for team calls)
-```
-
-roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (all same color)
-
-#### 3. manage template
-
-```
-/template list                          -> view current template
-/template add <name> <group> [desc]     -> add channel to template
-/template remove <name>                 -> remove from template
-/template sync                          -> sync changes to all games
-/template export                        -> download template as JSON
-/template import <file> [mode]          -> import template from JSON (merge/replace)
-```
-
-#### 4. per-game customization
-
-```
-/game addchannel ND marketing general   -> add custom channel
-/game removechannel ND code-networking  -> remove channel
-/game list                              -> list all games
-```
-
-#### 5. task management
-
-```
-/task create <title> <desc> <channel> <assignee> [priority] [deadline] [game]
-/task setup <game> [channel]  -> set up task board in channel
-/task board <game>            -> show/refresh task dashboard
-/task list [user]             -> list active tasks
-/task manage <game>           -> list all tasks with IDs (for deletion)
-/task delete <id>             -> delete a task
-/task import <file>           -> bulk import from JSON/XML
-/task help                    -> show detailed help
-```
-
-**task workflow:**
-1. admin creates task -> thread spawned in target channel
-2. assignee clicks `Start` -> status becomes "In Progress"
-3. assignee/lead clicks `Submit for Review` -> leads notified
-4. assignee/lead clicks `Approve & Close` -> task done, thread archived
-
-**header buttons (in channel, lead/admin only):**
-- `View Thread` - jump to discussion thread
-- `Reassign` - assign to different user
-- `Change Priority` - update priority level
-- `Cancel Task` - cancel and archive
-
-**thread buttons (assignee or lead):**
-- `Start` / `Pause` - toggle work status
-- `Update ETA` - set estimated completion
-- `Question` - ping leads for help
-- `Submit for Review` - request approval
-- `Approve & Close` - complete task
-
-**role-based styling:**
-- tasks styled by assignee role (Coder=blue/laptop, Artist=purple/palette, etc)
-- priority levels: Critical, High, Medium, Low
-
-**automation:**
-- reminders for tasks due within 24 hours
-- check-ins for stagnant tasks (no update 3+ days)
-- thread moderation (only assignee/leads can post)
-
-
-#### 6. discovery commands (for imports)
-
-```
-/debug list-channels [category_id]  -> get channel IDs
-/debug list-members [role]          -> get member IDs
-```
-
-
-![screenshot649_23-33-02-01-2026](https://github.com/user-attachments/assets/cac35ff9-9ec2-4ef5-9f46-d5213ca4ad48)
-![screenshot647_23-32-02-01-2026](https://github.com/user-attachments/assets/f2c43dce-36ef-4260-9048-65246733c30b)
+- **auto channels:** creates 25+ organized channels per game from a template
+- **smart acronyms:** "Neon Drift" -> ND, "The Great Escape" -> TGE
+- **role sync:** members with @Coder auto-get @ND-Coder for every game
+- **task management:** trello-style task tracking with threads, dashboards, automation
+- **multi-assignee:** assign multiple people to tasks with configurable approval rules
+- **setup wizard:** interactive `/admin setup` to configure task system
 
 ---
 
 ### commands
 
-| command | description |
-|---------|-------------|
-| `/newgame <name> [acronym]` | create game with channels and roles |
-| `/deletegame <acronym>` | delete game and all channels/roles |
-| `/game list` | list all games |
-| `/game addchannel` | add custom channel to a game |
-| `/game removechannel` | remove channel from a game |
-| `/assign add` | assign member role to user |
-| `/assign remove` | remove member role from user |
-| `/assign list` | list all users with member roles |
-| `/template list` | show channel template |
-| `/template add` | add channel to template |
-| `/template remove` | remove from template |
-| `/template sync` | sync template to all games |
-| `/template export` | download template as JSON |
-| `/template import` | import template from JSON |
-| `/group list` | list groups and emojis |
-| `/group emoji` | change a group's emoji |
-| `/task create` | create task with thread |
-| `/task setup` | set up task board channel |
-| `/task board` | show/refresh task dashboard |
-| `/task list` | list active tasks |
-| `/task manage` | list all tasks with IDs |
-| `/task delete` | delete a task by ID |
-| `/task import` | bulk import tasks from file |
-| `/task help` | show task system help |
-| `/debug list-channels` | list channels with IDs |
-| `/debug list-members` | list members with IDs |
+all commands organized into 4 groups:
+
+| group | command | description |
+|-------|---------|-------------|
+| **game** | `/game new <name>` | create game with channels and roles |
+| | `/game delete <acronym>` | delete game and all channels/roles |
+| | `/game list` | list all games |
+| | `/game addchannel` | add custom channel to a game |
+| | `/game removechannel` | remove channel from a game |
+| | `/game member add/remove` | assign/remove member roles |
+| | `/game members` | list all users with roles |
+| **template** | `/template list` | show channel template |
+| | `/template add` | add channel to template |
+| | `/template remove` | remove from template |
+| | `/template sync` | sync template to all games |
+| | `/template export/import` | backup/restore template |
+| | `/template groups` | list groups and emojis |
+| | `/template emoji` | change a group's emoji |
+| **task** | `/task new` | create task with thread |
+| | `/task close [id]` | close task (run in thread or specify ID) |
+| | `/task list [user]` | list active tasks |
+| | `/task board <game>` | show/refresh task dashboard |
+| | `/task help` | show detailed help |
+| **admin** | `/admin setup` | configure task system (wizard) |
+| | `/admin status` | show current config |
+| | `/admin migrate` | migrate tasks to multi-assignee |
+| | `/admin channels` | list channels with IDs |
+| | `/admin members` | list members with IDs |
 
 ---
 
-### task import formats
+### usage
 
-**JSON:**
+#### 1. create a game
+
+```
+/game new "Neon Drift"
+```
+
+creates category with 25 channels and game-specific roles.
+
+#### 2. manage members
+
+```
+/game member add @user Coder   -> assign role
+/game member remove @user Coder -> remove role
+/game members                   -> list all
+```
+
+available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
+
+#### 3. create tasks
+
+```
+/task new <title> <description> <channel> <assignee> [priority] [deadline]
+```
+
+- creates thread in target channel
+- supports multiple assignees (comma-separated IDs)
+- first assignee becomes primary owner
+
+#### 4. task workflow
+
+1. admin creates task -> thread spawned
+2. assignee clicks `Start` -> "In Progress"
+3. click `Submit for Review` -> leads notified
+4. click `Approve & Close` or `/task close` -> done, thread archived
+
+**buttons:**
+- `Manage Team` - add/remove members, set primary
+- `Start/Pause` - toggle work status
+- `Update ETA` - set completion estimate
+- `Question` - ping leads for help
+
+#### 5. server setup
+
+```
+/admin setup    -> interactive wizard
+/admin status   -> view current config
+/admin migrate  -> sync existing tasks
+```
+
+---
+
+### task import format
+
 ```json
 [
   {
@@ -242,71 +152,13 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
     "assignee_id": "123456789012345678",
     "target_channel_id": "987654321098765432",
     "deadline": "2026-05-20",
-    "priority": "High"
+    "priority": "High",
+    "additional_assignees": "111222333,444555666"
   }
 ]
 ```
 
-**XML:**
-```xml
-<tasks>
-  <task>
-    <title>Compose Main Theme</title>
-    <description>Orchestral track for main menu</description>
-    <assignee_id>123456789012345678</assignee_id>
-    <target_channel_id>555444333222111000</target_channel_id>
-    <deadline>2026-04-15</deadline>
-  </task>
-</tasks>
-```
-
-use `/debug list-channels` and `/debug list-members` to get IDs.
-
----
-
-### template import/export format
-
-```json
-{
-  "groups": [
-    {"name": "general", "emoji": "..."},
-    {"name": "code", "emoji": "..."}
-  ],
-  "channels": [
-    {
-      "name": "announcements",
-      "group": "general",
-      "is_voice": false,
-      "description": "Project updates"
-    },
-    {
-      "name": "voice",
-      "group": "voice",
-      "is_voice": true,
-      "description": null
-    }
-  ]
-}
-```
-
-import modes:
-- `merge` (default): add new entries, update existing
-- `replace`: clear template, import fresh
-
----
-
-### channel groups
-
-| group | emoji | channels |
-|-------|-------|----------|
-| general | chat | announcements, general, brainstorming, tasks |
-| code | laptop | frontend, backend, gamelogic, networking, bugs |
-| design | art | gui, 3d, 2d, animation, vfx, concept |
-| audio | speaker | music, sfx |
-| writing | pen | story, dialogue, copy |
-| qa | test | playtesting, feedback |
-| resources | books | refs, tools |
-| voice | mic | voice channel |
+use `/admin channels` and `/admin members` to get IDs.
 
 ---
 
@@ -314,38 +166,32 @@ import modes:
 
 ```
 gamedev-discord-bot/
--- bot/
-|   -- main.py          # bot entry, role sync
-|   -- config.py        # groups, template, env
-|   -- database.py      # sqlite crud
-|   -- models.py        # dataclasses
-|   -- utils.py         # acronym generation
-|   -- cogs/
-|       -- games.py     # /newgame, /deletegame, /game, /assign
-|       -- templates.py # /template, /group
-|       -- tasks.py     # /task, /debug, task management
--- assets/              # static files (gifs, etc)
--- data/                # sqlite database
+├── bot/
+│   ├── main.py          # bot entry, role sync
+│   ├── config.py        # env vars
+│   ├── database.py      # sqlite crud
+│   ├── models.py        # dataclasses
+│   ├── utils.py         # acronym generation
+│   └── cogs/
+│       ├── games.py     # /game commands
+│       ├── templates.py # /template commands
+│       ├── tasks.py     # /task commands
+│       └── setup.py     # /admin commands
+├── assets/              # static files
+└── data/                # sqlite database
 ```
 
 ---
 
 ### troubleshooting
 
-**commands not showing**
-wait a few minutes for discord to sync, or set `GUILD_ID` in .env for instant sync.
+**commands not showing** - wait for discord sync, or set `GUILD_ID` in .env
 
-**role sync not working**
-enable **Server Members Intent** in discord developer portal. bot role must be above game roles in hierarchy.
+**role sync not working** - enable Server Members Intent in developer portal
 
-**permission errors**
-move bot role higher in server role list. administrator permission recommended.
+**permission errors** - move bot role higher in server role list
 
-**acronym conflicts**
-if "ND" exists, new game auto-becomes "ND2". or specify custom: `/newgame "Name" acronym:XYZ`
-
-**task threads not working**
-bot needs "Create Public Threads" and "Send Messages in Threads" permissions.
+**task threads not working** - bot needs "Create Public Threads" permission
 
 ---
 

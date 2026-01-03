@@ -82,4 +82,22 @@ class TaskBoard:
     id: Optional[int]
     game_acronym: str
     channel_id: int
-    message_ids: str  # JSON array of message IDs for the embeds
+    message_ids: str
+
+
+@dataclass
+class TaskAssignee:
+    id: Optional[int]
+    task_id: int
+    user_id: int
+    is_primary: bool = False
+    has_approved: bool = False
+    added_at: Optional[datetime] = None
+
+
+@dataclass
+class ServerConfig:
+    id: Optional[int]
+    guild_id: int
+    config_json: str
+    setup_completed: bool = False
